@@ -14,13 +14,13 @@ typedef std::vector<Coord> QVector;
 typedef std::vector<std::vector<uint32_t>> CovCollector;
 typedef std::stack<uint64_t*> RowSetStack;
 
-// bool bitset_in(uint64_t* set, uint32_t elem) {
-//     return set[elem/64] &
-// }
-//
-// uint64_t shifted_1(uint32_t elem) {
-//     return uint64_t(1) << (63 - elem%64);
-// }
+uint64_t bitset_in(uint64_t* set, uint32_t elem) {
+    return set[elem >> 6] & (uint64_t(1) << (63 - elem & 63));
+}
+
+uint64_t shifted_1(uint32_t elem) {
+    return uint64_t(1) << (63 - elem & 63);
+}
 
 //! Class to represent changing trajectories
 /*!
@@ -92,9 +92,9 @@ public:
             }
         }
         for (uint32_t i1 = 0; i1 < n; i1++) {
-            if (!B[i1] || (!(not_cov_rows.top()[i1/64] & (uint64_t(1) << (63-i1%64))))) continue;
+            if (!B[i1] || (!bitset_in(not_cov_rows.top(), i1))) continue;
             for (uint32_t i2 = 0; i2 < n; i2++) {
-                if (!B[i2] || (i2 <= i1) || (!(not_cov_rows.top()[i2/64] & (uint64_t(1) << (63-i2%64))))) continue;
+                if (!B[i2] || (i2 <= i1) || (!bitset_in(not_cov_rows.top(), i2))) continue;
                 i1_dom_i2 = i2_dom_i1 = true;
                 for (uint32_t j = 0; j < col_chunks; j++) {
                     if ((M[i2][j] & M[i1][j] & H_B[j]) != (M[i1][j] & H_B[j])) i2_dom_i1 = false;
@@ -155,16 +155,16 @@ public:
 
         for (uint32_t k = 0; k < n; k++) {
             if (!B[k]) {
-                if (M[k][element.second / 64] & (uint64_t(1) << (63 - element.second % 64))) {
-                    new_cov[k/64] ^= new_cov[k/64] & ( uint64_t(1) << (63 - k % 64));
+                if (bitset_in(M[k], element.second)) {
+                    new_cov[k/64] ^= bitset_in(new_cov, k);
                 }
                 delta_ij[k] = NULL;
                 continue;
             } else {
                 delta_ij[k] = new uint64_t[col_chunks];
-                if (M[k][element.second / 64] & (uint64_t(1) << (63 - element.second % 64))) {
+                if (bitset_in(M[k], element.second)) {
                     // std::cout << "COLUMN " << element.second << " COVERS " << k << '\n';
-                    new_cov[k/64] ^= new_cov[k/64] & (uint64_t(1) << (63 - k % 64));
+                    new_cov[k/64] ^= bitset_in(new_cov, k);
                     for (uint32_t j = 0; j < col_chunks; j++) {
                         delta_ij[k][j] = B[k][j];
                     }
@@ -270,15 +270,15 @@ public:
                 delete [] delta_star_t[p];
             }
             delete [] delta_star_t;
-            delta_ij_old[element.first][element.second / 64] ^= uint64_t(1) << (63 - element.second % 64);
+            delta_ij_old[element.first][element.second / 64] ^= shifted_1(element.second);
             // std::cout << "DELTA IJ NEW" << std::endl;
             // print_matrix(std::cout, delta_ij_old, n, m);
 
-            B[element.first][element.second / 64] ^= uint64_t(1) << (63 - element.second % 64);
+            B[element.first][element.second / 64] ^= shifted_1(element.second);
         } else {
             uint64_t** delta_star_t = changes.top();
-            delta_star_t[element.first][element.second / 64] ^= uint64_t(1) << (63 - element.second % 64);
-            B[element.first][element.second / 64] ^= uint64_t(1) << (63 - element.second % 64);
+            delta_star_t[element.first][element.second / 64] ^= shifted_1(element.second);
+            B[element.first][element.second / 64] ^= shifted_1(element.second);
         }
         // std::cout << "AFTER UPDATE STACK:\n";
         // print_B();
@@ -300,7 +300,7 @@ public:
             }
         }
         for (uint32_t i = 0; i < n; i++) {
-            if (!(not_cov[i/64] & (uint64_t(1) << (63 - i %64)))) continue;// row i is covered
+            if (!bitset_in(not_cov, i)) continue;// row i is covered
             is_empty = true;
             for (uint32_t j = 0; j < col_chunks; j++) {
                 if (M[i][j] & H_B[j]) {
@@ -364,7 +364,7 @@ public:
     bool check_upper() {
         uint64_t *mask = new uint64_t[col_chunks]();
         for (Coord item: Q) {
-            mask[item.second/64] |= uint64_t(1) << (63 - item.second % 64);
+            mask[item.second/64] |= shifted_1(item.second);
         }
 
         // std::cout << "MASK: " << std::bitset<10>(mask[0] >> (64-m)) << std::endl;
