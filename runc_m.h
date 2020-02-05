@@ -27,8 +27,8 @@ enum {
 #endif
 
 class customset {
-    ull *data;
 public:
+    ull *data;
     size_t sz;
     size_t chunks;
 

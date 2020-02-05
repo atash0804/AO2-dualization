@@ -5,6 +5,7 @@
 #include <vector>
 #include <cmath>
 #include <set>
+#include <ctime>
 
 #include "matrix_utils.h"
 
@@ -51,10 +52,6 @@ public:
     rows not covered by Q*/
     RowSetStack not_cov_rows;
 
-    // //! Log of taken actions. Either Q or B is updated on each step
-    // /*! More detailed description. */
-    // Log_stack log;
-
     //! Checks if B matrix is empty (Stopping criterion)
     bool check_empty() {
         for (uint32_t i = 0; i < n; i++) {
@@ -92,7 +89,7 @@ public:
         for (uint32_t i1: not_cov_rows.top()) {
             if (!B[i1]) continue;
             for (uint32_t i2: not_cov_rows.top()) {
-                if (!B[i2]) continue;
+                if (!B[i2] || (i2 <= i1)) continue;
                 i1_dom_i2 = i2_dom_i1 = true;
                 for (uint32_t j = 0; j < nchunks; j++) {
                     if ((M[i2][j] & M[i1][j] & H_B[j]) != (M[i1][j] & H_B[j])) i2_dom_i1 = false;
@@ -154,15 +151,15 @@ public:
                 continue;
             } else {
                 delta_ij[k] = new uint64_t[nchunks];
-                if (B[k][element.second / 64] & (uint64_t(1) << (63 - element.second % 64))) {
-                    std::cout << "COLUMN " << element.second << " COVERS " << k << '\n';
+                if (M[k][element.second / 64] & (uint64_t(1) << (63 - element.second % 64))) {
+                    // std::cout << "COLUMN " << element.second << " COVERS " << k << '\n';
                     new_cov.erase(k);
                     for (uint32_t j = 0; j < nchunks; j++) {
                         delta_ij[k][j] = B[k][j];
                     }
                 } else {
                     for (uint32_t j = 0; j < nchunks; j++)
-                        delta_ij[k][j] = B[k][j] & B[element.first][j];
+                        delta_ij[k][j] = B[k][j] & M[element.first][j];
                 }
             }
         }
@@ -170,7 +167,7 @@ public:
         for (uint32_t row: new_cov) {
             if (M[row][element.second / 64] & (uint64_t(1) << (63 - element.second % 64))) {
                 should_delete.insert(row);
-                std::cout << "COLUMN " << element.second << " IN FACT COVERS " << row << '\n';
+                // std::cout << "COLUMN " << element.second << " IN FACT COVERS " << row << '\n';
             }
         }
         for (uint32_t row: should_delete) {
@@ -178,6 +175,8 @@ public:
         }
 
         not_cov_rows.push(new_cov);
+        // std::cout << "DELTA IJ" << std::endl;
+        // print_matrix(std::cout, delta_ij, n, m);
         return delta_ij;
     }
 
@@ -279,8 +278,8 @@ public:
             delta_star_t[element.first][element.second / 64] ^= uint64_t(1) << (63 - element.second % 64);
             B[element.first][element.second / 64] ^= uint64_t(1) << (63 - element.second % 64);
         }
-        std::cout << "AFTER UPDATE STACK:\n";
-        print_B();
+        // std::cout << "AFTER UPDATE STACK:\n";
+        // print_B();
         return;
     }
 
@@ -289,19 +288,25 @@ public:
         std::set<uint32_t> not_cov = not_cov_rows.top();
         uint64_t disjunct = 0;
         bool is_empty;
+        uint64_t *H_B = new uint64_t[nchunks]();
+        for (uint32_t i = 0; i < n; i++) {
+            if (!B[i]) continue;
+            for (uint32_t j = 0; j < nchunks; j++) {
+                H_B[j] |= B[i][j];
+            }
+        }
         for (uint32_t row: not_cov_rows.top()) {
             is_empty = true;
-            if (!B[row]) return false;
             for (uint32_t j = 0; j < nchunks; j++) {
-                if (B[row][j]) {
+                if (M[row][j] & H_B[j]) {
                     is_empty = false;
                     break;
                 }
             }
-            if (is_empty) std::cout << "CAN NOT COVER\n";
+            // if (is_empty) std::cout << "CAN NOT COVER\n";
             if (is_empty) return false;
         }
-        if (is_empty) std::cout << "CAN COVER\n";
+        // std::cout << "CAN COVER\n";
         return true;
     }
 
@@ -310,11 +315,11 @@ public:
     to construct a coverage. If the prefix ends with (B_t, Q_t), (B_t, Q_(t-1))
     is appended to the neighbour.*/
     bool find_neighbour() {
-        std::cout << "FINDING NEIGHBOUR" << std::endl;
+        // std::cout << "FINDING NEIGHBOUR" << std::endl;
         while (Q.size() > 0) {
             recover_changes(); // recover from latest delta_ij
-            std::cout << "RECOVERED:\n";
-            print_B();
+            // std::cout << "RECOVERED:\n";
+            // print_B();
             not_cov_rows.pop(); // discard rows not covered by latest added element
             Coord latest_element = Q.back(); // find latest added element
             Q.pop_back(); // discard latest added element
@@ -329,21 +334,22 @@ public:
     is therefore complete. */
     void complete_trajectory() {
         while (!check_empty()) {
-            std::cout << "INITIAL:\n";
-            print_B();
+            // std::cout << "INITIAL:\n";
+            // print_B();
             uint64_t** delta_star = check_dominating_rows();
             apply_changes(delta_star);
-            std::cout << "AFTER DELTA STAR:\n";
-            print_B();
+            // std::cout << "AFTER DELTA STAR:\n";
+            // print_B();
             if (check_empty()) break;
             Coord candidate = find_the_least();
             Q.push_back(candidate);
             uint64_t** delta_ij = eliminate_incompatible(candidate);
             apply_changes(delta_ij);
-            std::cout << "AFTER DELTA IJ:\n";
-            print_B();
+            // std::cout << "AFTER DELTA IJ:\n";
+            // std::cout << "CANDIDATE " << candidate.first << ' ' << candidate.second << std::endl;
+            // print_B();
         }
-        std::cout << "Trajectory completed" << '\n';
+        // std::cout << "Trajectory completed" << '\n';
     }
 
     //! Checks if Q that was created is upper covering set
@@ -372,7 +378,7 @@ public:
                     }
                 }
                 if (valid) {
-                    std::cout << "NOT UPPER" << '\n';
+                    // std::cout << "NOT UPPER" << '\n';
                     return false;
                 }
             }
@@ -411,43 +417,56 @@ public:
 };
 
 int main(int argc, char *argv[]) {
-    uint32_t n = 5;
-    uint32_t m = 5;
+    uint32_t n = 40;
+    uint32_t m = 40;
     uint32_t nchunks = m / 64 + 1 - (m % 64 == 0);
 
-    generate_matrix(n, m, "matrix.txt", 0.5, 36);
+    generate_matrix(n, m, "matrix.txt", 0.5, 35);
     uint64_t** R = read_matrix("matrix.txt", n, m);
 
     CovCollector coverages;
     Trajectory traj(n, m, R);
     // std::cout << traj.find_the_least().first << '\n';
     // std::cout << traj.find_the_least().second << '\n';
-
-    int counter = 0;
+    clock_t start = clock();
     do {
         traj.complete_trajectory();
-        std::cout << "TRAJ: ";
-        for (auto item: traj.Q) {
-            std::cout << '(' << item.first << ' ' << item.second << ") ";
-        }
-        std::cout << '\n';
-        std::cout << "RES COV: ";
-        for (uint32_t col: traj.get_coverage()) {
-            std::cout << col << ' ';
-        }
+        // std::cout << "||||||||||||||||||||||||||||TRAJ: ";
+        // for (auto item: traj.Q) {
+        //     std::cout << '(' << item.first << ' ' << item.second << ") ";
+        // }
+        // std::cout << '\n';
+        // std::cout << "RES COV: ";
+        // for (uint32_t col: traj.get_coverage()) {
+        //     std::cout << col << ' ';
+        // }
         if (traj.check_upper()) {
             coverages.push_back(traj.get_coverage());
-            std::cout << "SUCCESS";
+            // std::cout << "SUCCESS";
         };
-        std::cout << '\n';
-        counter ++;
-    } while (traj.find_neighbour() && (counter < 3));
+        // std::cout << '\n';
+    } while (traj.find_neighbour());
+    clock_t stop = clock();
+    double elapsed = (double) (stop - start) / CLOCKS_PER_SEC;
+    std::cout << "AO2 dualization time: " << elapsed << '\n';
+    std::cout << "N coverages: " << coverages.size() << '\n';
+    // std::cout << "FOUND COVERAGES:" << '\n';
+    // std::cout << "PERFORMING CHECKS" << coverages.size() << '\n';
+    // for (auto cov: coverages) {
+    //     uint64_t *H_cov = new uint64_t[nchunks]();
+    //     for (uint32_t col: cov) {
+    //         H_cov[col/64] |= uint64_t(1) << (63 - col % 64);
+    //     }
+    //     bool is_cov;
+    //     for (uint32_t i = 0; i < n; i++) {
+    //         is_cov = false;
+    //         for (uint32_t j = 0; j < nchunks; j++) {
+    //             if (R[i][j] & H_cov[j]) {is_cov = true; break;}
+    //         }
+    //         if (!is_cov) {
+    //             std::cout << "ENTITY FOUND IS NOT COVERAGE\n";
+    //         };
+    //     }
+    // }
 
-    std::cout << "FOUND COVERAGES:" << std::endl;
-    for (auto cov: coverages) {
-        for (uint32_t col: cov) {
-            std::cout << col << ' ';
-        }
-        std::cout << std::endl;
-    }
 }
