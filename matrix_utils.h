@@ -47,7 +47,7 @@ uint64_t** read_matrix(const string &filename, size_t height, size_t width) {
     uint64_t** matrix = new uint64_t*[height];
     for (size_t i = 0; i < height; i++) {
         uint64_t* row = new uint64_t[chunks];
-        for (int j = 0; j < chunks; j++) {
+        for (size_t j = 0; j < chunks; j++) {
             uint64_t chunk = 0;
             for (size_t k = 1;
                  (k <= CHUNK_SIZE) && (j * CHUNK_SIZE + k <= width); k++) {

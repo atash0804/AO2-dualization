@@ -12,9 +12,9 @@ using namespace std;
 int main(int argc, char *argv[]) {
     const string filename = "matrix.txt";
     size_t width = 10;
-    size_t height = 5;
+    size_t height = 10;
 
-    generate_matrix(height, width, filename, 0.5, 35);
+    // generate_matrix(height, width, filename, 0.5, 35);
     PartialBitMatrix matr = PartialBitMatrix("matrix.txt", height, width);
     // cout << "MATRIX" << matr << endl;
 

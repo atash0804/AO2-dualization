@@ -4,7 +4,6 @@
 #include <bitset>
 #include <vector>
 #include <cmath>
-#include <set>
 #include <ctime>
 
 #include "matrix_utils.h"
@@ -13,23 +12,29 @@ typedef std::stack<uint64_t**> BMatrixStack;
 typedef std::pair<uint32_t, uint32_t> Coord;
 typedef std::vector<Coord> QVector;
 typedef std::vector<std::vector<uint32_t>> CovCollector;
-typedef std::stack<std::set<uint32_t>> RowSetStack;
-// typedef std::stack<bool> Log_stack;
+typedef std::stack<uint64_t*> RowSetStack;
+
+// bool bitset_in(uint64_t* set, uint32_t elem) {
+//     return set[elem/64] &
+// }
+//
+// uint64_t shifted_1(uint32_t elem) {
+//     return uint64_t(1) << (63 - elem%64);
+// }
 
 //! Class to represent changing trajectories
 /*!
   This class implements the trajectory - sequence of changing pairs (B, Q),
-  which ends with a candidate for shortest coverage.
+  which ends with a candidate for shortest coverage and all operations on
+  trajectories which are needed for AO2.
 
-  B is represented as
-
-  Q is represented as
 */
 class Trajectory {
 public:
     uint32_t n; //!< First dimension of matrix
     uint32_t m; //!< Second dimension of matrix
-    uint32_t nchunks;
+    uint32_t col_chunks;
+    uint32_t row_chunks;
 
     //! Stores initial state of matrix
     uint64_t** M;
@@ -56,7 +61,7 @@ public:
     bool check_empty() {
         for (uint32_t i = 0; i < n; i++) {
             if (!B[i]) continue;
-            for (uint32_t j = 0; j < nchunks; j++) {
+            for (uint32_t j = 0; j < col_chunks; j++) {
                 if (B[i][j]) return false;
             }
         }
@@ -75,23 +80,23 @@ public:
                 continue;
             } else {
                 // () in the end sets memory to zeros
-                delta_star[i1] = new uint64_t[nchunks]();
-                // for (uint32_t j = 0; j < nchunks; j++) delta_star[i1][j] = 0;
+                delta_star[i1] = new uint64_t[col_chunks]();
+                // for (uint32_t j = 0; j < col_chunks; j++) delta_star[i1][j] = 0;
             }
         }
-        uint64_t *H_B = new uint64_t[nchunks]();
+        uint64_t *H_B = new uint64_t[col_chunks]();
         for (uint32_t i = 0; i < n; i++) {
             if (!B[i]) continue;
-            for (uint32_t j = 0; j < nchunks; j++) {
+            for (uint32_t j = 0; j < col_chunks; j++) {
                 H_B[j] |= B[i][j];
             }
         }
-        for (uint32_t i1: not_cov_rows.top()) {
-            if (!B[i1]) continue;
-            for (uint32_t i2: not_cov_rows.top()) {
-                if (!B[i2] || (i2 <= i1)) continue;
+        for (uint32_t i1 = 0; i1 < n; i1++) {
+            if (!B[i1] || (!(not_cov_rows.top()[i1/64] & (uint64_t(1) << (63-i1%64))))) continue;
+            for (uint32_t i2 = 0; i2 < n; i2++) {
+                if (!B[i2] || (i2 <= i1) || (!(not_cov_rows.top()[i2/64] & (uint64_t(1) << (63-i2%64))))) continue;
                 i1_dom_i2 = i2_dom_i1 = true;
-                for (uint32_t j = 0; j < nchunks; j++) {
+                for (uint32_t j = 0; j < col_chunks; j++) {
                     if ((M[i2][j] & M[i1][j] & H_B[j]) != (M[i1][j] & H_B[j])) i2_dom_i1 = false;
                     if ((M[i1][j] & M[i2][j] & H_B[j]) != (M[i2][j] & H_B[j])) i1_dom_i2 = false;
                     if (!(i2_dom_i1 || i1_dom_i2)) break;
@@ -100,12 +105,12 @@ public:
                 if (!(i2_dom_i1 || i1_dom_i2)) continue;
                 if (i2_dom_i1 && i1_dom_i2) continue;
                 if (i2_dom_i1) {
-                    for (uint32_t j = 0; j < nchunks; j++) {
+                    for (uint32_t j = 0; j < col_chunks; j++) {
                         delta_star[i2][j] |= (M[i1][j] ^ M[i2][j]) & B[i2][j];
                     }
                 }
                 if (i1_dom_i2) {
-                    for (uint32_t j = 0; j < nchunks; j++) {
+                    for (uint32_t j = 0; j < col_chunks; j++) {
                         delta_star[i1][j] |= (M[i1][j] ^ M[i2][j]) & B[i1][j];
                     }
                 }
@@ -120,7 +125,7 @@ public:
     Coord find_the_least() {
         uint32_t least_d1 = -1;
         uint32_t least_d2 = -1;
-        for (uint32_t j = 0; j < nchunks; j++) {
+        for (uint32_t j = 0; j < col_chunks; j++) {
             for (uint32_t i = 0; i < n; i++) {
                 if (!B[i]) continue;
                 if (B[i][j] && (least_d2 > (j+1)*64 - int(log2(B[i][j])) - 1)) {
@@ -128,7 +133,7 @@ public:
                     least_d2 = (j+1)*64 - int(log2(B[i][j])) - 1;
                 }
             }
-            if (least_d1 != -1) return Coord(least_d1, least_d2);
+            if (least_d1 != uint64_t(-1)) return Coord(least_d1, least_d2);
         }
         return Coord(least_d1, least_d2);
     }
@@ -143,35 +148,31 @@ public:
     conjunction of two rows)*/
     uint64_t** eliminate_incompatible(Coord element) {
         uint64_t **delta_ij = new uint64_t*[n];
-        std::set<uint32_t> new_cov = not_cov_rows.top();
+        uint64_t* new_cov = new uint64_t[row_chunks];
+        for (uint32_t i = 0; i < row_chunks; i++) {
+            new_cov[i] = not_cov_rows.top()[i];
+        }
 
         for (uint32_t k = 0; k < n; k++) {
             if (!B[k]) {
+                if (M[k][element.second / 64] & (uint64_t(1) << (63 - element.second % 64))) {
+                    new_cov[k/64] ^= new_cov[k/64] & ( uint64_t(1) << (63 - k % 64));
+                }
                 delta_ij[k] = NULL;
                 continue;
             } else {
-                delta_ij[k] = new uint64_t[nchunks];
+                delta_ij[k] = new uint64_t[col_chunks];
                 if (M[k][element.second / 64] & (uint64_t(1) << (63 - element.second % 64))) {
                     // std::cout << "COLUMN " << element.second << " COVERS " << k << '\n';
-                    new_cov.erase(k);
-                    for (uint32_t j = 0; j < nchunks; j++) {
+                    new_cov[k/64] ^= new_cov[k/64] & (uint64_t(1) << (63 - k % 64));
+                    for (uint32_t j = 0; j < col_chunks; j++) {
                         delta_ij[k][j] = B[k][j];
                     }
                 } else {
-                    for (uint32_t j = 0; j < nchunks; j++)
+                    for (uint32_t j = 0; j < col_chunks; j++)
                         delta_ij[k][j] = B[k][j] & M[element.first][j];
                 }
             }
-        }
-        std::set<uint32_t> should_delete;
-        for (uint32_t row: new_cov) {
-            if (M[row][element.second / 64] & (uint64_t(1) << (63 - element.second % 64))) {
-                should_delete.insert(row);
-                // std::cout << "COLUMN " << element.second << " IN FACT COVERS " << row << '\n';
-            }
-        }
-        for (uint32_t row: should_delete) {
-            new_cov.erase(row);
         }
 
         not_cov_rows.push(new_cov);
@@ -184,24 +185,25 @@ public:
     Trajectory(uint32_t d1, uint32_t d2, uint64_t** Matrix) {
         n = d1;
         m = d2;
-        nchunks = (m-1) / 64 + 1;
+        col_chunks = (m-1) / 64 + 1;
+        row_chunks = (n-1) / 64 + 1;
         B = new uint64_t*[n];
         for (uint32_t i = 0; i < n; i++) {
-            B[i] = new uint64_t[nchunks];
-            for (uint32_t j = 0; j < nchunks; j++) {
+            B[i] = new uint64_t[col_chunks];
+            for (uint32_t j = 0; j < col_chunks; j++) {
                 B[i][j] = Matrix[i][j];
             }
         }
         M = new uint64_t*[n];
         for (uint32_t i = 0; i < n; i++) {
-            M[i] = new uint64_t[nchunks];
-            for (uint32_t j = 0; j < nchunks; j++) {
+            M[i] = new uint64_t[col_chunks];
+            for (uint32_t j = 0; j < col_chunks; j++) {
                 M[i][j] = Matrix[i][j];
             }
         }
-        std::set<uint32_t> tmp;
-        for (uint32_t i = 0; i < n; i++) {
-            tmp.insert(i);
+        uint64_t* tmp = new uint64_t[row_chunks];
+        for (uint32_t i = 0; i <  row_chunks; i++) {
+            tmp[i] = -1;
         }
         not_cov_rows.push(tmp);
     }
@@ -217,7 +219,7 @@ public:
             if (!B[i]) {
                 B[i] = latest_change[i];
             } else {
-                for (uint32_t j = 0; j < nchunks; j++) {
+                for (uint32_t j = 0; j < col_chunks; j++) {
                     B[i][j] ^= latest_change[i][j];
                 }
                 delete [] latest_change[i];
@@ -233,7 +235,7 @@ public:
         for (uint32_t i = 0; i < n; i++) {
             if (!B[i]) continue;
             zero_b_i = true;
-            for (uint32_t j = 0; j < nchunks; j++) {
+            for (uint32_t j = 0; j < col_chunks; j++) {
                 B[i][j] ^= recent_changes[i][j];
                 if (B[i][j]) zero_b_i = false;
             }
@@ -262,7 +264,7 @@ public:
             // print_matrix(std::cout, delta_ij_old, n, m);
             for (uint32_t p = 0; p < n; p++) {
                 if (!delta_ij_old[p] || !delta_star_t[p]) continue;
-                for (uint32_t q = 0; q < nchunks; q++) {
+                for (uint32_t q = 0; q < col_chunks; q++) {
                     delta_ij_old[p][q] ^= delta_star_t[p][q];
                 }
                 delete [] delta_star_t[p];
@@ -285,20 +287,23 @@ public:
 
     //! Checks that all rows not covered by Q can be covered by H(B)
     bool check_coverage() {
-        std::set<uint32_t> not_cov = not_cov_rows.top();
-        uint64_t disjunct = 0;
+        uint64_t* not_cov = new uint64_t[row_chunks];
+        for (uint32_t i = 0; i <  row_chunks; i++) {
+            not_cov[i] = not_cov_rows.top()[i];
+        }
         bool is_empty;
-        uint64_t *H_B = new uint64_t[nchunks]();
+        uint64_t *H_B = new uint64_t[col_chunks]();
         for (uint32_t i = 0; i < n; i++) {
             if (!B[i]) continue;
-            for (uint32_t j = 0; j < nchunks; j++) {
+            for (uint32_t j = 0; j < col_chunks; j++) {
                 H_B[j] |= B[i][j];
             }
         }
-        for (uint32_t row: not_cov_rows.top()) {
+        for (uint32_t i = 0; i < n; i++) {
+            if (!(not_cov[i/64] & (uint64_t(1) << (63 - i %64)))) continue;// row i is covered
             is_empty = true;
-            for (uint32_t j = 0; j < nchunks; j++) {
-                if (M[row][j] & H_B[j]) {
+            for (uint32_t j = 0; j < col_chunks; j++) {
+                if (M[i][j] & H_B[j]) {
                     is_empty = false;
                     break;
                 }
@@ -320,6 +325,7 @@ public:
             recover_changes(); // recover from latest delta_ij
             // std::cout << "RECOVERED:\n";
             // print_B();
+            delete [] not_cov_rows.top();
             not_cov_rows.pop(); // discard rows not covered by latest added element
             Coord latest_element = Q.back(); // find latest added element
             Q.pop_back(); // discard latest added element
@@ -356,7 +362,7 @@ public:
     /*! Only upper covering sets add coverages to results. That is done to
     avoid multiple copies of one coverage. */
     bool check_upper() {
-        uint64_t *mask = new uint64_t[nchunks]();
+        uint64_t *mask = new uint64_t[col_chunks]();
         for (Coord item: Q) {
             mask[item.second/64] |= uint64_t(1) << (63 - item.second % 64);
         }
@@ -365,9 +371,9 @@ public:
 
         bool valid;
         for (Coord item: Q) {
-            for (int i = 0; i < item.first; i++) {
+            for (uint32_t i = 0; i < item.first; i++) {
                 valid = true;
-                for (uint32_t j = 0; j < nchunks; j++) {
+                for (uint32_t j = 0; j < col_chunks; j++) {
                     // std::cout << "ELEM: " << std::bitset<10>(M[i][j] >> (64-m)) << ' ' << std::bitset<10>(M[item.first][j] >> (64-m))<< std::endl;
                     // std::cout << "ELEM: " << std::bitset<10>((M[i][j] & mask[j]) >> (64-m)) << ' ' << std::bitset<10>((M[item.first][j] & mask[j]) >> (64-m)) << std::endl;
 
@@ -396,19 +402,18 @@ public:
     }
 
     void print_B() {
-        //std::cout << "NCHUNKS:" << nchunks << '\n';
         std::cout << "+++++++++++++++++++++" << '\n';
         for (uint32_t i = 0; i < n; i++) {
             if (!B[i]) {
                 std::cout << "NULL" << '\n';
                 continue;
             }
-            for (uint32_t j = 0; j < nchunks-1; j++) {
+            for (uint32_t j = 0; j < col_chunks-1; j++) {
                 std::cout << std::bitset<64>(B[i][j]) << ' ';
             }
-            size_t bits_left = m-(nchunks-1)*64;
+            size_t bits_left = m-(col_chunks-1)*64;
             for (size_t j = 0; j < bits_left; j++) {
-                std::cout << ((B[i][nchunks-1] >> (63 - j)) & uint64_t(1));
+                std::cout << ((B[i][col_chunks-1] >> (63 - j)) & uint64_t(1));
             }
             std::cout << std::endl;
         }
@@ -419,9 +424,9 @@ public:
 int main(int argc, char *argv[]) {
     uint32_t n = 40;
     uint32_t m = n;
-    uint32_t nchunks = m / 64 + 1 - (m % 64 == 0);
+    uint32_t col_chunks = m / 64 + 1 - (m % 64 == 0);
 
-    // generate_matrix(n, m, "matrix.txt", 0.5, 33);
+    generate_matrix(n, m, "matrix.txt", 0.5, 33);
     uint64_t** R = read_matrix("matrix.txt", n, m);
 
     CovCollector coverages;
@@ -459,14 +464,14 @@ int main(int argc, char *argv[]) {
     // }
     // std::cout << "PERFORMING CHECKS" << coverages.size() << '\n';
     // for (auto cov: coverages) {
-    //     uint64_t *H_cov = new uint64_t[nchunks]();
+    //     uint64_t *H_cov = new uint64_t[col_chunks]();
     //     for (uint32_t col: cov) {
     //         H_cov[col/64] |= uint64_t(1) << (63 - col % 64);
     //     }
     //     bool is_cov;
     //     for (uint32_t i = 0; i < n; i++) {
     //         is_cov = false;
-    //         for (uint32_t j = 0; j < nchunks; j++) {
+    //         for (uint32_t j = 0; j < col_chunks; j++) {
     //             if (R[i][j] & H_cov[j]) {is_cov = true; break;}
     //         }
     //         if (!is_cov) {

@@ -5,4 +5,7 @@ if [ $? -eq 0 ]; then
          echo "MAKE FAILED, STOPPING" && exit 1
     fi
 fi
-./$1
+for var in "$@"
+do
+    ./$var
+done
