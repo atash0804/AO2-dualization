@@ -14,6 +14,12 @@ typedef std::vector<Coord> QVector;
 typedef std::vector<std::vector<uint32_t>> CovCollector;
 typedef std::stack<uint64_t*> RowSetStack;
 
+/************************************************************
+*   This file contains experimental implementation of AO2
+*   algorithm
+************************************************************/
+
+
 //! Class to represent changing trajectories
 /*!
   This class implements the trajectory - sequence of changing pairs (B, Q),
@@ -135,13 +141,13 @@ public:
         uint32_t least_d2 = -1;
         for (uint32_t j = 0; j < col_chunks; j++) {
             for (uint32_t i = 0; i < n; i++) {
-                if (!B[i]) continue;
-                if (B[i][j] && (least_d2 > (j+1)*64 - int(log2(B[i][j])) - 1)) {
+                if (!B[i] || !B[i][j]) continue;
+                if (B[i][j] && (least_d2 > (j+1)*64 - uint32_t(log2(B[i][j])) - 1)) {
                     least_d1 = i;
-                    least_d2 = (j+1)*64 - int(log2(B[i][j])) - 1;
+                    least_d2 = (j+1)*64 - uint32_t(log2(B[i][j])) - 1;
                 }
             }
-            if (least_d1 != uint64_t(-1)) return Coord(least_d1, least_d2);
+            if (least_d1 != uint32_t(-1)) return Coord(least_d1, least_d2);
         }
         return Coord(least_d1, least_d2);
     }
@@ -350,10 +356,14 @@ public:
             // print_B();
             if (check_empty()) break;
             Coord candidate = find_the_least();
+            // if (candidate.first == uint32_t(-1) || candidate.second == uint32_t(-1)) {
+            //     std::cout << "COULD NOT FIND CAND\n";
+            //     print_B();
+            // }
             Q.push_back(candidate);
+            // std::cout << "CANDIDATE " << candidate.first << ' ' << candidate.second << std::endl;
             eliminate_incompatible(candidate);
             // std::cout << "AFTER DELTA IJ:\n";
-            // std::cout << "CANDIDATE " << candidate.first << ' ' << candidate.second << std::endl;
             // print_B();
         }
         // std::cout << "Trajectory completed" << '\n';
@@ -420,11 +430,14 @@ public:
 };
 
 int main(int argc, char *argv[]) {
-    uint32_t n = 30;
-    uint32_t m = n;
+
+    // std::cout << "LOG" << log2(uint64_t(1) << 64) << std::endl;
+    // return 0;
+    uint32_t n = 10;
+    uint32_t m = 100;
     uint32_t col_chunks = m / 64 + 1 - (m % 64 == 0);
 
-    generate_matrix(n, m, "matrix.txt", 0.5, 31);
+    generate_matrix(n, m, "matrix.txt", 0.5, 22);
     uint64_t** R = read_matrix("matrix.txt", n, m);
 
     CovCollector coverages;

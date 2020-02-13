@@ -1,8 +1,5 @@
 var searchData=
 [
-  ['check_5fcoverage',['check_coverage',['../classTrajectory.html#a20bfcc8384ba73f0f3536915ee6e96b3',1,'Trajectory']]],
-  ['check_5fdominating_5frows',['check_dominating_rows',['../classTrajectory.html#a1665f2a71ebc6bbb1f61fb698dd2d01f',1,'Trajectory']]],
-  ['check_5fempty',['check_empty',['../classTrajectory.html#ab673e86bd3d50891e20a93d99f78b2b9',1,'Trajectory']]],
-  ['check_5fupper',['check_upper',['../classTrajectory.html#a1b05de987e0af7f31d52de4f6dce0a63',1,'Trajectory']]],
-  ['complete_5ftrajectory',['complete_trajectory',['../classTrajectory.html#ad1d81650e68c35aa2381a8a994a82143',1,'Trajectory']]]
+  ['eliminate_5fdominating_5frows',['eliminate_dominating_rows',['../classTrajectory.html#ae365d2940eab0c04fad6c7c0c0b0d11f',1,'Trajectory']]],
+  ['eliminate_5fincompatible',['eliminate_incompatible',['../classTrajectory.html#a79a48fc4325913f549e998669512a65b',1,'Trajectory']]]
 ];

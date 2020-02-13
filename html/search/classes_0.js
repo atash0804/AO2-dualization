@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['bitmatrix',['BitMatrix',['../classBitMatrix.html',1,'']]]
+  ['trajectory',['Trajectory',['../classTrajectory.html',1,'']]]
 ];

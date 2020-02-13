@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['recover_5fchanges',['recover_changes',['../classTrajectory.html#a54fca706fcc37d8f5e2102ae1d810737',1,'Trajectory']]]
+  ['update_5fstack',['update_stack',['../classTrajectory.html#a2556388ba08656fb4a5bde8577f8d68e',1,'Trajectory::update_stack(Coord element)'],['../classTrajectory.html#a2556388ba08656fb4a5bde8577f8d68e',1,'Trajectory::update_stack(Coord element)']]]
 ];

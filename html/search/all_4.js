@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['eliminate_5fincompatible',['eliminate_incompatible',['../classTrajectory.html#a94549f8f097c77ccf2d1cabd5a2d0a87',1,'Trajectory']]]
+  ['get_5fcoverage',['get_coverage',['../classTrajectory.html#adcd5788cdc72064f4cf82eff89546a8a',1,'Trajectory']]]
 ];
