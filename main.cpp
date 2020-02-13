@@ -278,6 +278,14 @@ public:
             delta_star_t[element.first][element.second / 64] ^= uint64_t(1) << (63 - element.second % 64);
             B[element.first][element.second / 64] ^= uint64_t(1) << (63 - element.second % 64);
         }
+        bool is_zero = true;
+        for (uint32_t j = 0; j < nchunks; j++) {
+            if (B[element.first][j]) is_zero = false;
+        }
+        if (is_zero) {
+            delete [] B[element.first];
+            B[element.first] = NULL;
+        }
         // std::cout << "AFTER UPDATE STACK:\n";
         // print_B();
         return;
@@ -417,7 +425,7 @@ public:
 };
 
 int main(int argc, char *argv[]) {
-    uint32_t n = 40;
+    uint32_t n = 30;
     uint32_t m = n;
     uint32_t nchunks = m / 64 + 1 - (m % 64 == 0);
 
@@ -431,7 +439,7 @@ int main(int argc, char *argv[]) {
     clock_t start = clock();
     do {
         traj.complete_trajectory();
-        // std::cout << "||||||||||||||||||||||||||||TRAJ: ";
+        // std::cout << "||||||||||||||||||||||||||||TRAJ: \n";
         // for (auto item: traj.Q) {
         //     std::cout << '(' << item.first << ' ' << item.second << ") ";
         // }
