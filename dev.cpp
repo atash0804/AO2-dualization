@@ -422,11 +422,12 @@ public:
 };
 
 int main(int argc, char *argv[]) {
-    uint32_t n = 40;
+    uint32_t n = 30;
     uint32_t m = n;
     uint32_t col_chunks = m / 64 + 1 - (m % 64 == 0);
 
-    generate_matrix(n, m, "matrix.txt", 0.5, 33);
+    srand(time(NULL));
+    generate_matrix(n, m, "matrix.txt", 0.5);
     uint64_t** R = read_matrix("matrix.txt", n, m);
 
     CovCollector coverages;
