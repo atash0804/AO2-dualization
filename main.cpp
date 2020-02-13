@@ -173,7 +173,6 @@ public:
                 continue;
             } else {
                 if (M[k][element.second / 64] & (uint64_t(1) << (63 - element.second % 64))) {
-                    // std::cout << "COLUMN " << element.second << " COVERS " << k << '\n';
                     new_cov[k/64] ^= new_cov[k/64] & (uint64_t(1) << (63 - k % 64));
                     updated_B[k] = NULL;
                 } else {
@@ -213,7 +212,6 @@ public:
     }
 
     ~Trajectory() {
-        std::cout << "DESTROYED\n";
         for (uint32_t i = 0; i < n; i++) {
             if (B[i]) delete [] B[i];
             if (M[i]) delete [] M[i];
@@ -409,11 +407,10 @@ int main(int argc, char *argv[]) {
             } else {
                 n_extra += 1;
             };
-            // std::cout << '\n';
         } while (traj.find_neighbour());
         clock_t stop = clock();
         elapsed += (double) (stop - start) / CLOCKS_PER_SEC;
-        // std::cout << "COVERAGES:" << coverages.size() << '\n';
+
         n_cov += coverages.size();
         std:cout << "RUN " << r << " COMPLETED\n";
         for (uint32_t i = 0; i < n; i++) {
@@ -427,30 +424,4 @@ int main(int argc, char *argv[]) {
     std::cout << uint64_t(n_cov/runs) << " & ";
     std::cout << uint64_t(n_extra/runs) << " & ";
     std::cout << uint64_t(n_cov/runs) << " \\\\ \n";
-
-    // std::cout << "FOUND COVERAGES:" << '\n';
-    // for (auto cov: coverages) {
-    //     for (uint32_t col: cov) {
-    //         std::cout << col << ' ';
-    //     }
-    //     std::cout << '\n';
-    // }
-    // std::cout << "PERFORMING CHECKS" << coverages.size() << '\n';
-    // for (auto cov: coverages) {
-    //     uint64_t *H_cov = new uint64_t[col_chunks]();
-    //     for (uint32_t col: cov) {
-    //         H_cov[col/64] |= uint64_t(1) << (63 - col % 64);
-    //     }
-    //     bool is_cov;
-    //     for (uint32_t i = 0; i < n; i++) {
-    //         is_cov = false;
-    //         for (uint32_t j = 0; j < col_chunks; j++) {
-    //             if (R[i][j] & H_cov[j]) {is_cov = true; break;}
-    //         }
-    //         if (!is_cov) {
-    //             std::cout << "ENTITY FOUND IS NOT COVERAGE\n";
-    //         };
-    //     }
-    // }
-
 }
