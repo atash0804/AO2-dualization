@@ -157,7 +157,7 @@ public:
     B_kj. If it equals 1, all 1s of the row are incomatible. Otherwise, if
     B_kj = 0, the incomatible elements are all 1s from B_k & B_i (elementwise
     conjunction of two rows)*/
-    void eliminate_incompatible(Coord element) {
+    void eliminate_incompatible(Coord& element) {
         uint64_t **updated_B = new uint64_t*[n];
         uint64_t* new_cov = new uint64_t[row_chunks];
         for (uint32_t i = 0; i < row_chunks; i++) {
@@ -237,7 +237,7 @@ public:
         [...||delta_star_(t-1)||delta_ij_(t-1) + delta_star_(t) + latest_element|...]
 
         As delta_star_(t) is already applied to B, we should apply only latest_element*/
-    void update_stack(Coord element) {
+    void update_stack(Coord& element) {
         if (changes.size() > 1) {
             uint64_t** latest_state = changes.top();
             changes.pop();
@@ -377,42 +377,46 @@ public:
     }
 };
 
+void AO2(uint32_t n, uint32_t m, uint64_t** R, uint64_t & n_cov, uint64_t& n_extra, uint64_t& n_steps) {
+    uint64_t len_last = 0;
+    CovCollector coverages;
+    Trajectory traj(n, m, R);
+    do {
+        len_last = traj.changes.size();
+        traj.complete_trajectory();
+        n_steps += traj.changes.size() - len_last;
+
+        if (traj.check_upper()) {
+            coverages.push_back(traj.get_coverage());
+        } else {
+            n_extra++;
+        };
+    } while (traj.find_neighbour());
+    n_cov += coverages.size();
+}
+
 int main(int argc, char *argv[]) {
     uint32_t n = 20;
-    uint32_t m = 20;
+    uint32_t m = 50;
     uint32_t runs = 10;
 
     double elapsed = 0;
     uint64_t n_cov = 0;
     uint64_t n_extra = 0;
     uint64_t n_steps = 0;
-    uint64_t len_last = 0;
     srand(time(NULL));
     for (uint32_t r = 0; r < runs; r++) {
-
         generate_matrix(n, m, "matrix.txt", 0.5);
         uint64_t** R = read_matrix("matrix.txt", n, m);
 
-        CovCollector coverages;
-        Trajectory traj(n, m, R);
         clock_t start = clock();
 
-        do {
-            len_last = traj.changes.size();
-            traj.complete_trajectory();
-            n_steps += traj.changes.size() - len_last;
+        AO2(n, m, R, n_cov, n_extra, n_steps);
 
-            if (traj.check_upper()) {
-                coverages.push_back(traj.get_coverage());
-            } else {
-                n_extra += 1;
-            };
-        } while (traj.find_neighbour());
         clock_t stop = clock();
         elapsed += (double) (stop - start) / CLOCKS_PER_SEC;
 
-        n_cov += coverages.size();
-        std:cout << "RUN " << r << " COMPLETED\n";
+        std::cout << "RUN " << r << " COMPLETED\n";
         for (uint32_t i = 0; i < n; i++) {
             delete [] R[i];
         }
@@ -423,5 +427,5 @@ int main(int argc, char *argv[]) {
     std::cout << elapsed/runs << " & ";
     std::cout << uint64_t(n_cov/runs) << " & ";
     std::cout << uint64_t(n_extra/runs) << " & ";
-    std::cout << uint64_t(n_cov/runs) << " \\\\ \n";
+    std::cout << uint64_t(n_steps/runs) << " \\\\ \n";
 }
