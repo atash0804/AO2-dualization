@@ -110,21 +110,19 @@ public:
                     new_del[i2/64] ^= (~new_del[i2/64]) & ( uint64_t(1) << (63 - i2 % 64));
                     delete [] updated_B[i2];
                     updated_B[i2] = NULL;
-                    // std::cout << "SHOULD DELETE:" << i2 << " dom " << i1 << '\n';
                 } else {
                     if (i1_dom_i2) {
                         new_del[i1/64] ^= (~new_del[i1/64]) & ( uint64_t(1) << (63 - i1 % 64));
                         delete [] updated_B[i1];
                         updated_B[i1] = NULL;
-                        // std::cout << "SHOULD DELETE:" << i1 << " dom " << i2 << '\n';
                     }
                 }
             }
         }
         delete [] H_B;
-        changes.push(B);
+        for (uint32_t i = 0; i < n; i++) delete [] B[i];
+        delete [] B;
         deleted_by_domination.push(new_del);
-        // std::cout << "DEL BY DOM2:" << std::bitset<10>(deleted_by_domination.top()[0] >> 54) << '\n';
         B = updated_B;
         return;
     }
@@ -245,10 +243,8 @@ public:
 
         As delta_star_(t) is already applied to B, we should apply only latest_element*/
     void update_stack(Coord& element) {
-        if (changes.size() > 1) {
+        if (changes.size() > 0) {
             uint64_t** latest_state = changes.top();
-            changes.pop();
-            uint64_t** previous_state = changes.top();
             changes.pop();
 
             delete [] deleted_by_domination.top();
@@ -258,13 +254,11 @@ public:
             delete [] deleted_by_domination.top();
             deleted_by_domination.pop();
             deleted_by_domination.push(del_in_B);
+
             for (uint32_t p = 0; p < n; p++) {
-                delete [] previous_state[p];
                 delete [] B[p];
             }
-            delete [] previous_state;
             delete [] B;
-
             B = latest_state;
             B[element.first][element.second / 64] ^= uint64_t(1) << (63 - element.second % 64);
         } else {
@@ -332,7 +326,6 @@ public:
     void complete_trajectory() {
         while (!check_empty()) {
             eliminate_dominating_rows();
-            // if (check_empty()) break;
             Coord candidate = find_the_least();
             Q.push_back(candidate);eliminate_incompatible(candidate);
         }
@@ -348,7 +341,6 @@ public:
             mask[item.second/64] |= uint64_t(1) << (63 - item.second % 64);
         }
         bool valid;
-        // std::cout << "DEL IN CHUP:" << std::bitset<10>(deleted_by_domination.top()[0] >> 54) << '\n';
         for (Coord item: Q) {
             for (uint32_t i = 0; i < item.first; i++) {
                 if (deleted_by_domination.top()[i/64] & uint64_t(1) << (63 - i % 64)) continue;
