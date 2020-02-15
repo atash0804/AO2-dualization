@@ -19,7 +19,6 @@ typedef std::stack<uint64_t*> RowSetStack;
 *   algorithm
 ************************************************************/
 
-
 //! Class to represent changing trajectories
 /*!
   This class implements the trajectory - sequence of changing pairs (B, Q),
@@ -55,6 +54,8 @@ public:
     rows not covered by Q*/
     RowSetStack not_cov_rows;
 
+    RowSetStack deleted_by_domination;
+
     //! Checks if B matrix is empty (Stopping criterion)
     bool check_empty() {
         for (uint32_t i = 0; i < n; i++) {
@@ -76,10 +77,8 @@ public:
                 updated_B[i1] = NULL;
                 continue;
             } else {
-                // () in the end sets memory to zeros
                 updated_B[i1] = new uint64_t[col_chunks]();
                 for (uint32_t j = 0; j < col_chunks; j++) updated_B[i1][j] = B[i1][j];
-                // for (uint32_t j = 0; j < col_chunks; j++) delta_star[i1][j] = 0;
             }
         }
         uint64_t *H_B = new uint64_t[col_chunks]();
@@ -88,6 +87,11 @@ public:
             for (uint32_t j = 0; j < col_chunks; j++) {
                 H_B[j] |= B[i][j];
             }
+        }
+
+        uint64_t* new_del = new uint64_t[row_chunks];
+        for (uint32_t i = 0; i < row_chunks; i++) {
+            new_del[i] = deleted_by_domination.top()[i];
         }
 
         bool is_zero;
@@ -101,36 +105,26 @@ public:
                     if ((M[i1][j] & M[i2][j] & H_B[j]) != (M[i2][j] & H_B[j])) i1_dom_i2 = false;
                     if (!(i2_dom_i1 || i1_dom_i2)) break;
                 }
-                // std::cout << "i1 = " << i1 << "; i2 = " << i2 << " i1 dom i2 " << bool(i1_dom_i2) << " i2 dom i1 " << bool(i2_dom_i1) << '\n';
                 if (!(i2_dom_i1 || i1_dom_i2)) continue;
-                if (i2_dom_i1 && i1_dom_i2) continue;
                 if (i2_dom_i1) {
-                    if (!updated_B[i2]) continue;
-                    is_zero = true;
-                    for (uint32_t j = 0; j < col_chunks; j++) {
-                        updated_B[i2][j] ^= updated_B[i2][j] & (M[i1][j] ^ M[i2][j]);
-                        if (updated_B[i2][j]) is_zero = false;
-                    }
-                    if (is_zero) {
-                        delete [] updated_B[i2];
-                        updated_B[i2] = NULL;
-                    }
-                }
-                if (i1_dom_i2) {
-                    is_zero = true;
-                    if (!updated_B[i1]) continue;
-                    for (uint32_t j = 0; j < col_chunks; j++) {
-                        updated_B[i1][j] ^= updated_B[i1][j] & (M[i1][j] ^ M[i2][j]);
-                        if (updated_B[i1][j]) is_zero = false;
-                    }
-                    if (is_zero) {
+                    new_del[i2/64] ^= (~new_del[i2/64]) & ( uint64_t(1) << (63 - i2 % 64));
+                    delete [] updated_B[i2];
+                    updated_B[i2] = NULL;
+                    // std::cout << "SHOULD DELETE:" << i2 << " dom " << i1 << '\n';
+                } else {
+                    if (i1_dom_i2) {
+                        new_del[i1/64] ^= (~new_del[i1/64]) & ( uint64_t(1) << (63 - i1 % 64));
                         delete [] updated_B[i1];
                         updated_B[i1] = NULL;
+                        // std::cout << "SHOULD DELETE:" << i1 << " dom " << i2 << '\n';
                     }
                 }
             }
         }
+        delete [] H_B;
         changes.push(B);
+        deleted_by_domination.push(new_del);
+        // std::cout << "DEL BY DOM2:" << std::bitset<10>(deleted_by_domination.top()[0] >> 54) << '\n';
         B = updated_B;
         return;
     }
@@ -160,9 +154,7 @@ public:
     B_kj. If it equals 1, all 1s of the row are incomatible. Otherwise, if
     B_kj = 0, the incomatible elements are all 1s from B_k & B_i (elementwise
     conjunction of two rows)*/
-    void eliminate_incompatible(Coord element) {
-        // std::cout << "UNDER QUESTION\n" << std::flush;
-        // print_B();
+    void eliminate_incompatible(Coord& element) {
         uint64_t **updated_B = new uint64_t*[n];
         uint64_t* new_cov = new uint64_t[row_chunks];
         for (uint32_t i = 0; i < row_chunks; i++) {
@@ -178,7 +170,6 @@ public:
                 continue;
             } else {
                 if (M[k][element.second / 64] & (uint64_t(1) << (63 - element.second % 64))) {
-                    // std::cout << "COLUMN " << element.second << " COVERS " << k << '\n';
                     new_cov[k/64] ^= new_cov[k/64] & (uint64_t(1) << (63 - k % 64));
                     updated_B[k] = NULL;
                 } else {
@@ -189,11 +180,14 @@ public:
             }
         }
 
+        uint64_t* tmp = new uint64_t[row_chunks];
+        for (uint32_t i = 0; i < row_chunks; i++) {
+            tmp[i] = deleted_by_domination.top()[i];
+        }
+        deleted_by_domination.push(tmp);
         not_cov_rows.push(new_cov);
         changes.push(B);
         B = updated_B;
-        // std::cout << "AFTER QUESTION\n" << std::flush;
-        // print_B();
         return;
     }
 
@@ -217,41 +211,31 @@ public:
             tmp[i] = uint64_t(-1);
         }
         not_cov_rows.push(tmp);
+        tmp = new uint64_t[row_chunks];
+        for (uint32_t i = 0; i <  row_chunks; i++) {
+            tmp[i] = uint64_t(0);
+        }
+        deleted_by_domination.push(tmp);
     }
 
-    //! Recover changes in B matrix which were made earlier
-    void recover_changes() {
-        std::cout << "STACK SIZE:\n" << changes.size() << std::endl << std::flush;
-        if (changes.empty()) {
-            std::cout << "CHANGE STACK EMPTY:\n" << std::flush;
-            throw "Empty change stack. Nothing to recover";
-        }
-        // if (changes.size() == 1) {
-        //     uint64_t** latest_state = changes.top();
-        //     print_matrix(std::cout, latest_state, n, m);
-        //     // std::cout << "LATEST STATE:" << latest_state << std::endl << std::flush;
-        //     for (uint32_t i = 0; i < n; i++) {
-        //         // std::cout << "i:" << i << latest_state[i] << std::endl << std::flush;
-        //
-        //         if (!latest_state[i]) {
-        //             B[i] = NULL;
-        //             continue;
-        //         }
-        //         if (!B[i]) B[i] = new uint64_t[col_chunks];
-        //         for (uint32_t j = 0; j < col_chunks; j++) {
-        //             B[i][j] = latest_state[i][j];
-        //         }
-        //     }
-        //     return;
-        // }
-        uint64_t** latest_state = changes.top();
-        changes.pop();
-        if (!latest_state) return;
+    ~Trajectory() {
         for (uint32_t i = 0; i < n; i++) {
-            delete [] B[i];
+            if (B[i]) delete [] B[i];
+            if (M[i]) delete [] M[i];
         }
         delete [] B;
-        B = latest_state;
+        delete [] M;
+
+        for (; !changes.empty(); changes.pop()) {
+            for (uint32_t i = 0; i < n; i++) {
+                delete [] changes.top()[i];
+            }
+            delete [] changes.top();
+        }
+
+        for (; !not_cov_rows.empty(); not_cov_rows.pop()) {
+            delete [] not_cov_rows.top();
+        }
     }
 
     //! Update B stack and B itself while finding a neighbouring trajectory
@@ -260,12 +244,20 @@ public:
         [...||delta_star_(t-1)||delta_ij_(t-1) + delta_star_(t) + latest_element|...]
 
         As delta_star_(t) is already applied to B, we should apply only latest_element*/
-    void update_stack(Coord element) {
+    void update_stack(Coord& element) {
         if (changes.size() > 1) {
             uint64_t** latest_state = changes.top();
             changes.pop();
             uint64_t** previous_state = changes.top();
             changes.pop();
+
+            delete [] deleted_by_domination.top();
+            deleted_by_domination.pop();
+            uint64_t* del_in_B = deleted_by_domination.top();
+            deleted_by_domination.pop();
+            delete [] deleted_by_domination.top();
+            deleted_by_domination.pop();
+            deleted_by_domination.push(del_in_B);
             for (uint32_t p = 0; p < n; p++) {
                 delete [] previous_state[p];
                 delete [] B[p];
@@ -286,17 +278,11 @@ public:
             delete [] B[element.first];
             B[element.first] = NULL;
         }
-        // std::cout << "AFTER UPDATE STACK:\n" << std::flush;
-        // print_B();
         return;
     }
 
     //! Checks that all rows not covered by Q can be covered by H(B)
     bool check_coverage() {
-        uint64_t* not_cov = new uint64_t[row_chunks];
-        for (uint32_t i = 0; i <  row_chunks; i++) {
-            not_cov[i] = not_cov_rows.top()[i];
-        }
         bool is_empty;
         uint64_t *H_B = new uint64_t[col_chunks]();
         for (uint32_t i = 0; i < n; i++) {
@@ -306,7 +292,7 @@ public:
             }
         }
         for (uint32_t i = 0; i < n; i++) {
-            if (!(not_cov[i/64] & (uint64_t(1) << (63 - i % 64)))) continue;// row i is covered
+            if (!(not_cov_rows.top()[i/64] & (uint64_t(1) << (63 - i % 64)))) continue;// row i is covered
             is_empty = true;
             for (uint32_t j = 0; j < col_chunks; j++) {
                 if (M[i][j] & H_B[j]) {
@@ -314,10 +300,12 @@ public:
                     break;
                 }
             }
-            // if (is_empty) std::cout << "CAN NOT COVER\n";
-            if (is_empty) return false;
+            if (is_empty) {
+                delete [] H_B;
+                return false;
+            }
         }
-        // std::cout << "CAN COVER\n";
+        delete [] H_B;
         return true;
     }
 
@@ -326,20 +314,14 @@ public:
     to construct a coverage. If the prefix ends with (B_t, Q_t), (B_t, Q_(t-1))
     is appended to the neighbour.*/
     bool find_neighbour() {
-        // std::cout << "FINDING NEIGHBOUR" << std::endl;
+        uint64_t *tmp = new uint64_t[row_chunks];
         while (Q.size() > 0) {
-            // std::cout << "BEFORE REC CHANGES:\n" << std::flush;
-            // recover_changes(); // recover from latest delta_ij
-            // std::cout << "RECOVERED:\n" << std::flush;
-            // print_B();
             delete [] not_cov_rows.top();
             not_cov_rows.pop(); // discard rows not covered by latest added element
             Coord latest_element = Q.back(); // find latest added element
             Q.pop_back(); // discard latest added element
             update_stack(latest_element);
-            // std::cout << "BEFORE CHECK COV:\n" << std::flush;
             if (check_coverage()) return true;
-            // std::cout << "AFTER CHECK COV:\n" << std::flush;
         }
         return false;
     }
@@ -349,50 +331,35 @@ public:
     is therefore complete. */
     void complete_trajectory() {
         while (!check_empty()) {
-            // std::cout << "INITIAL:\n";
-            // print_B();
             eliminate_dominating_rows();
-            // std::cout << "AFTER DELTA STAR:\n";
-            // print_B();
-            if (check_empty()) break;
+            // if (check_empty()) break;
             Coord candidate = find_the_least();
-            // if (candidate.first == uint32_t(-1) || candidate.second == uint32_t(-1)) {
-            //     std::cout << "COULD NOT FIND CAND\n";
-            //     print_B();
-            // }
-            Q.push_back(candidate);
-            // std::cout << "CANDIDATE " << candidate.first << ' ' << candidate.second << std::endl;
-            eliminate_incompatible(candidate);
-            // std::cout << "AFTER DELTA IJ:\n";
-            // print_B();
+            Q.push_back(candidate);eliminate_incompatible(candidate);
         }
-        // std::cout << "Trajectory completed" << '\n';
     }
 
     //! Checks if Q that was created is upper covering set
     /*! Only upper covering sets add coverages to results. That is done to
     avoid multiple copies of one coverage. */
     bool check_upper() {
+        // return true;
         uint64_t *mask = new uint64_t[col_chunks]();
         for (Coord item: Q) {
             mask[item.second/64] |= uint64_t(1) << (63 - item.second % 64);
         }
-
-        // std::cout << "MASK: " << std::bitset<10>(mask[0] >> (64-m)) << std::endl;
-
         bool valid;
+        // std::cout << "DEL IN CHUP:" << std::bitset<10>(deleted_by_domination.top()[0] >> 54) << '\n';
         for (Coord item: Q) {
             for (uint32_t i = 0; i < item.first; i++) {
+                if (deleted_by_domination.top()[i/64] & uint64_t(1) << (63 - i % 64)) continue;
                 valid = true;
                 for (uint32_t j = 0; j < col_chunks; j++) {
                     if ((M[i][j] & mask[j]) != (M[item.first][j] & mask[j])) {
                         valid = false;
-                        // std::cout << "NOT EQUAL" << '\n';
                         break;
                     }
                 }
                 if (valid) {
-                    // std::cout << "NOT UPPER" << '\n';
                     return false;
                 }
             }
@@ -429,69 +396,92 @@ public:
     }
 };
 
-int main(int argc, char *argv[]) {
-    uint32_t n = 30;
-    uint32_t m = n;
-    uint32_t col_chunks = m / 64 + 1 - (m % 64 == 0);
-
-    srand(time(NULL));
-    generate_matrix(n, m, "matrix.txt", 0.5);
-    uint64_t** R = read_matrix("matrix.txt", n, m);
-
+void AO2(uint32_t n, uint32_t m, uint64_t** R, uint64_t & n_cov, uint64_t& n_extra, uint64_t& n_steps) {
+    uint64_t len_last = 0;
     CovCollector coverages;
     Trajectory traj(n, m, R);
-    // std::cout << traj.find_the_least().first << '\n';
-    // std::cout << traj.find_the_least().second << '\n';
-    clock_t start = clock();
     do {
+        len_last = traj.changes.size();
         traj.complete_trajectory();
-        // std::cout << "COMPLETE STACK COND:";
-        // for (auto dump = traj.changes; !dump.empty(); dump.pop())
-        //     print_matrix(std::cout, dump.top(), n, m);
-        // std::cout << "DONE\n";
-        // std::cout << "||||||||||||||||||||||||||||TRAJ: \n";
-        // for (auto item: traj.Q) {
-        //     std::cout << '(' << item.first << ' ' << item.second << ") ";
-        // }
-        // std::cout << '\n';
-        // std::cout << "RES COV: ";
-        // for (uint32_t col: traj.get_coverage()) {
-        //     std::cout << col << ' ';
-        // }
+        n_steps += traj.changes.size() - len_last;
         if (traj.check_upper()) {
+            // for (auto elem: traj.Q) {
+            //     std::cout << "(" << elem.first << "," << elem.second << ")" << std::flush;
+            // }
+            // std::cout << '\n';
             coverages.push_back(traj.get_coverage());
-            // std::cout << "SUCCESS";
+        } else {
+            n_extra++;
         };
-        // std::cout << '\n';
     } while (traj.find_neighbour());
-    clock_t stop = clock();
-    double elapsed = (double) (stop - start) / CLOCKS_PER_SEC;
-    std::cout << "AO2 dualization time: " << elapsed << '\n';
-    std::cout << "N coverages: " << coverages.size() << '\n';
+    n_cov += coverages.size();
 
-    // std::cout << "FOUND COVERAGES:" << '\n';
+    // std::cout << "FOUND COVERAGES:" << '\n' << std::flush;
     // for (auto cov: coverages) {
     //     for (uint32_t col: cov) {
     //         std::cout << col << ' ';
     //     }
     //     std::cout << '\n';
     // }
-    // std::cout << "PERFORMING CHECKS" << coverages.size() << '\n';
-    // for (auto cov: coverages) {
-    //     uint64_t *H_cov = new uint64_t[col_chunks]();
-    //     for (uint32_t col: cov) {
-    //         H_cov[col/64] |= uint64_t(1) << (63 - col % 64);
-    //     }
-    //     bool is_cov;
-    //     for (uint32_t i = 0; i < n; i++) {
-    //         is_cov = false;
-    //         for (uint32_t j = 0; j < col_chunks; j++) {
-    //             if (R[i][j] & H_cov[j]) {is_cov = true; break;}
-    //         }
-    //         if (!is_cov) {
-    //             std::cout << "ENTITY FOUND IS NOT COVERAGE\n";
-    //         };
-    //     }
-    // }
+}
 
+int main(int argc, char *argv[]) {
+    uint32_t n = 40;
+    uint32_t m = n;
+    double elapsed = 0;
+    uint64_t n_cov = 0;
+    uint64_t n_extra = 0;
+    uint64_t n_steps = 0;
+
+    // generate_matrix(n, m, "matrix.txt", 0.5);
+    uint64_t** R = read_matrix("matrix.txt", n, m);
+
+    clock_t start = clock();
+
+    AO2(n, m, R, n_cov, n_extra, n_steps);
+
+    clock_t stop = clock();
+    elapsed += (double) (stop - start) / CLOCKS_PER_SEC;
+
+    for (uint32_t i = 0; i < n; i++) {
+        delete [] R[i];
+    }
+    delete [] R;
+
+    std::cout << elapsed << " & ";
+    std::cout << uint64_t(n_cov) << " & ";
+    std::cout << uint64_t(n_extra) << " & ";
+    std::cout << uint64_t(n_steps) << " \\\\ \n";
+    // uint32_t n = 20;
+    // uint32_t m = 50;
+    // uint32_t runs = 10;
+    //
+    // double elapsed = 0;
+    // uint64_t n_cov = 0;
+    // uint64_t n_extra = 0;
+    // uint64_t n_steps = 0;
+    // srand(time(NULL));
+    // for (uint32_t r = 0; r < runs; r++) {
+    //     generate_matrix(n, m, "matrix.txt", 0.5);
+    //     uint64_t** R = read_matrix("matrix.txt", n, m);
+    //
+    //     clock_t start = clock();
+    //
+    //     AO2(n, m, R, n_cov, n_extra, n_steps);
+    //
+    //     clock_t stop = clock();
+    //     elapsed += (double) (stop - start) / CLOCKS_PER_SEC;
+    //
+    //     std::cout << "RUN " << r << " COMPLETED\n";
+    //     for (uint32_t i = 0; i < n; i++) {
+    //         delete [] R[i];
+    //     }
+    //     delete [] R;
+    // }
+    //
+    // std::cout << "$" << n << " \\times " << m << "$ & ";
+    // std::cout << elapsed/runs << " & ";
+    // std::cout << uint64_t(n_cov/runs) << " & ";
+    // std::cout << uint64_t(n_extra/runs) << " & ";
+    // std::cout << uint64_t(n_steps/runs) << " \\\\ \n";
 }
