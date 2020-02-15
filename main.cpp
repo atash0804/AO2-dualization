@@ -15,9 +15,9 @@ typedef std::vector<std::vector<uint32_t>> CovCollector;
 typedef std::stack<uint64_t*> RowSetStack;
 
 /************************************************************
-*   This file contains basic implementation of AO2 algorithm
+*   This file contains experimental implementation of AO2
+*   algorithm
 ************************************************************/
-
 
 //! Class to represent changing trajectories
 /*!
@@ -54,6 +54,8 @@ public:
     rows not covered by Q*/
     RowSetStack not_cov_rows;
 
+    RowSetStack deleted_by_domination;
+
     //! Checks if B matrix is empty (Stopping criterion)
     bool check_empty() {
         for (uint32_t i = 0; i < n; i++) {
@@ -87,6 +89,11 @@ public:
             }
         }
 
+        uint64_t* new_del = new uint64_t[row_chunks];
+        for (uint32_t i = 0; i < row_chunks; i++) {
+            new_del[i] = deleted_by_domination.top()[i];
+        }
+
         bool is_zero;
         for (uint32_t i1 = 0; i1 < n; i1++) {
             if (!B[i1] || (!(not_cov_rows.top()[i1/64] & (uint64_t(1) << (63-i1%64))))) continue;
@@ -99,27 +106,13 @@ public:
                     if (!(i2_dom_i1 || i1_dom_i2)) break;
                 }
                 if (!(i2_dom_i1 || i1_dom_i2)) continue;
-                if (i2_dom_i1 && i1_dom_i2) continue;
                 if (i2_dom_i1) {
-                    if (!updated_B[i2]) continue;
-                    is_zero = true;
-                    for (uint32_t j = 0; j < col_chunks; j++) {
-                        updated_B[i2][j] ^= updated_B[i2][j] & (M[i1][j] ^ M[i2][j]);
-                        if (updated_B[i2][j]) is_zero = false;
-                    }
-                    if (is_zero) {
-                        delete [] updated_B[i2];
-                        updated_B[i2] = NULL;
-                    }
-                }
-                if (i1_dom_i2) {
-                    is_zero = true;
-                    if (!updated_B[i1]) continue;
-                    for (uint32_t j = 0; j < col_chunks; j++) {
-                        updated_B[i1][j] ^= updated_B[i1][j] & (M[i1][j] ^ M[i2][j]);
-                        if (updated_B[i1][j]) is_zero = false;
-                    }
-                    if (is_zero) {
+                    new_del[i2/64] ^= (~new_del[i2/64]) & ( uint64_t(1) << (63 - i2 % 64));
+                    delete [] updated_B[i2];
+                    updated_B[i2] = NULL;
+                } else {
+                    if (i1_dom_i2) {
+                        new_del[i1/64] ^= (~new_del[i1/64]) & ( uint64_t(1) << (63 - i1 % 64));
                         delete [] updated_B[i1];
                         updated_B[i1] = NULL;
                     }
@@ -127,7 +120,9 @@ public:
             }
         }
         delete [] H_B;
-        changes.push(B);
+        for (uint32_t i = 0; i < n; i++) delete [] B[i];
+        delete [] B;
+        deleted_by_domination.push(new_del);
         B = updated_B;
         return;
     }
@@ -183,6 +178,11 @@ public:
             }
         }
 
+        uint64_t* tmp = new uint64_t[row_chunks];
+        for (uint32_t i = 0; i < row_chunks; i++) {
+            tmp[i] = deleted_by_domination.top()[i];
+        }
+        deleted_by_domination.push(tmp);
         not_cov_rows.push(new_cov);
         changes.push(B);
         B = updated_B;
@@ -209,6 +209,11 @@ public:
             tmp[i] = uint64_t(-1);
         }
         not_cov_rows.push(tmp);
+        tmp = new uint64_t[row_chunks];
+        for (uint32_t i = 0; i <  row_chunks; i++) {
+            tmp[i] = uint64_t(0);
+        }
+        deleted_by_domination.push(tmp);
     }
 
     ~Trajectory() {
@@ -238,18 +243,22 @@ public:
 
         As delta_star_(t) is already applied to B, we should apply only latest_element*/
     void update_stack(Coord& element) {
-        if (changes.size() > 1) {
+        if (changes.size() > 0) {
             uint64_t** latest_state = changes.top();
             changes.pop();
-            uint64_t** previous_state = changes.top();
-            changes.pop();
+
+            delete [] deleted_by_domination.top();
+            deleted_by_domination.pop();
+            uint64_t* del_in_B = deleted_by_domination.top();
+            deleted_by_domination.pop();
+            delete [] deleted_by_domination.top();
+            deleted_by_domination.pop();
+            deleted_by_domination.push(del_in_B);
+
             for (uint32_t p = 0; p < n; p++) {
-                delete [] previous_state[p];
                 delete [] B[p];
             }
-            delete [] previous_state;
             delete [] B;
-
             B = latest_state;
             B[element.first][element.second / 64] ^= uint64_t(1) << (63 - element.second % 64);
         } else {
@@ -299,6 +308,7 @@ public:
     to construct a coverage. If the prefix ends with (B_t, Q_t), (B_t, Q_(t-1))
     is appended to the neighbour.*/
     bool find_neighbour() {
+        uint64_t *tmp = new uint64_t[row_chunks];
         while (Q.size() > 0) {
             delete [] not_cov_rows.top();
             not_cov_rows.pop(); // discard rows not covered by latest added element
@@ -316,7 +326,6 @@ public:
     void complete_trajectory() {
         while (!check_empty()) {
             eliminate_dominating_rows();
-            // if (check_empty()) break
             Coord candidate = find_the_least();
             Q.push_back(candidate);eliminate_incompatible(candidate);
         }
@@ -326,6 +335,7 @@ public:
     /*! Only upper covering sets add coverages to results. That is done to
     avoid multiple copies of one coverage. */
     bool check_upper() {
+        // return true;
         uint64_t *mask = new uint64_t[col_chunks]();
         for (Coord item: Q) {
             mask[item.second/64] |= uint64_t(1) << (63 - item.second % 64);
@@ -333,6 +343,7 @@ public:
         bool valid;
         for (Coord item: Q) {
             for (uint32_t i = 0; i < item.first; i++) {
+                if (deleted_by_domination.top()[i/64] & uint64_t(1) << (63 - i % 64)) continue;
                 valid = true;
                 for (uint32_t j = 0; j < col_chunks; j++) {
                     if ((M[i][j] & mask[j]) != (M[item.first][j] & mask[j])) {
@@ -385,8 +396,11 @@ void AO2(uint32_t n, uint32_t m, uint64_t** R, uint64_t & n_cov, uint64_t& n_ext
         len_last = traj.changes.size();
         traj.complete_trajectory();
         n_steps += traj.changes.size() - len_last;
-
         if (traj.check_upper()) {
+            // for (auto elem: traj.Q) {
+            //     std::cout << "(" << elem.first << "," << elem.second << ")" << std::flush;
+            // }
+            // std::cout << '\n';
             coverages.push_back(traj.get_coverage());
         } else {
             n_extra++;
@@ -394,9 +408,9 @@ void AO2(uint32_t n, uint32_t m, uint64_t** R, uint64_t & n_cov, uint64_t& n_ext
     } while (traj.find_neighbour());
     n_cov += coverages.size();
 
-    // std::cout << "FOUND COVERAGES:" << '\n';
+    // std::cout << "FOUND COVERAGES:" << '\n' << std::flush;
     // for (auto cov: coverages) {
-    //      for (uint32_t col: cov) {
+    //     for (uint32_t col: cov) {
     //         std::cout << col << ' ';
     //     }
     //     std::cout << '\n';
@@ -411,7 +425,6 @@ int main(int argc, char *argv[]) {
     uint64_t n_extra = 0;
     uint64_t n_steps = 0;
 
-    srand(time(NULL));
     generate_matrix(n, m, "matrix.txt", 0.5);
     uint64_t** R = read_matrix("matrix.txt", n, m);
 
@@ -431,7 +444,6 @@ int main(int argc, char *argv[]) {
     std::cout << uint64_t(n_cov) << " & ";
     std::cout << uint64_t(n_extra) << " & ";
     std::cout << uint64_t(n_steps) << " \\\\ \n";
-
     // uint32_t n = 20;
     // uint32_t m = 50;
     // uint32_t runs = 10;
