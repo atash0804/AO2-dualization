@@ -397,45 +397,37 @@ void AO2(uint32_t n, uint32_t m, uint64_t** R, uint64_t & n_cov, uint64_t& n_ext
         traj.complete_trajectory();
         n_steps += traj.changes.size() - len_last;
         if (traj.check_upper()) {
-            // for (auto elem: traj.Q) {
-            //     std::cout << "(" << elem.first << "," << elem.second << ")" << std::flush;
-            // }
-            // std::cout << '\n';
             coverages.push_back(traj.get_coverage());
         } else {
             n_extra++;
         };
     } while (traj.find_neighbour());
     n_cov += coverages.size();
-
-    // std::cout << "FOUND COVERAGES:" << '\n' << std::flush;
-    // for (auto cov: coverages) {
-    //     for (uint32_t col: cov) {
-    //         std::cout << col << ' ';
-    //     }
-    //     std::cout << '\n';
-    // }
 }
 
 int main(int argc, char *argv[]) {
-    uint32_t n = 40;
-    uint32_t m = n;
+    srand(time(NULL));
+
+    uint32_t HEIGHT = 10;
+    uint32_t WIDTH = 100;
+    double SPARSITY = 0.5;
+
     double elapsed = 0;
     uint64_t n_cov = 0;
     uint64_t n_extra = 0;
     uint64_t n_steps = 0;
 
-    generate_matrix(n, m, "matrix.txt", 0.5);
-    uint64_t** R = read_matrix("matrix.txt", n, m);
+    generate_matrix(HEIGHT, WIDTH, "matrix.txt", SPARSITY);
+    uint64_t** R = read_matrix("matrix.txt", HEIGHT, WIDTH);
 
     clock_t start = clock();
 
-    AO2(n, m, R, n_cov, n_extra, n_steps);
+    AO2(HEIGHT, WIDTH, R, n_cov, n_extra, n_steps);
 
     clock_t stop = clock();
     elapsed += (double) (stop - start) / CLOCKS_PER_SEC;
 
-    for (uint32_t i = 0; i < n; i++) {
+    for (uint32_t i = 0; i < HEIGHT; i++) {
         delete [] R[i];
     }
     delete [] R;
@@ -444,36 +436,4 @@ int main(int argc, char *argv[]) {
     std::cout << uint64_t(n_cov) << " & ";
     std::cout << uint64_t(n_extra) << " & ";
     std::cout << uint64_t(n_steps) << " \\\\ \n";
-    // uint32_t n = 20;
-    // uint32_t m = 50;
-    // uint32_t runs = 10;
-    //
-    // double elapsed = 0;
-    // uint64_t n_cov = 0;
-    // uint64_t n_extra = 0;
-    // uint64_t n_steps = 0;
-    // srand(time(NULL));
-    // for (uint32_t r = 0; r < runs; r++) {
-    //     generate_matrix(n, m, "matrix.txt", 0.5);
-    //     uint64_t** R = read_matrix("matrix.txt", n, m);
-    //
-    //     clock_t start = clock();
-    //
-    //     AO2(n, m, R, n_cov, n_extra, n_steps);
-    //
-    //     clock_t stop = clock();
-    //     elapsed += (double) (stop - start) / CLOCKS_PER_SEC;
-    //
-    //     std::cout << "RUN " << r << " COMPLETED\n";
-    //     for (uint32_t i = 0; i < n; i++) {
-    //         delete [] R[i];
-    //     }
-    //     delete [] R;
-    // }
-    //
-    // std::cout << "$" << n << " \\times " << m << "$ & ";
-    // std::cout << elapsed/runs << " & ";
-    // std::cout << uint64_t(n_cov/runs) << " & ";
-    // std::cout << uint64_t(n_extra/runs) << " & ";
-    // std::cout << uint64_t(n_steps/runs) << " \\\\ \n";
 }
