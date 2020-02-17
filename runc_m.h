@@ -16,7 +16,6 @@
 
 using namespace std;
 
-typedef uint64_t ull;
 size_t cov_count = 0;
 
 #ifndef DUALIZATION_CHUNK_SIZE

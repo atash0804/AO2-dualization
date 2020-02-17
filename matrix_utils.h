@@ -9,12 +9,14 @@
 #include <cstring>
 #include <bitset>
 
+#include "AO2_trajectory.h"
+
 using namespace std;
 
 #ifndef DUALIZATION_CHUNK_SIZE
 #define DUALIZATION_CHUNK_SIZE
 enum {
-    CHUNK_SIZE = sizeof(uint64_t) * 8,
+    CHUNK_SIZE = sizeof(ull) * 8,
 };
 #endif
 
@@ -33,7 +35,7 @@ void generate_matrix(size_t height, size_t width, const string &filename,
     out.close();
 }
 
-uint64_t** read_matrix(const string &filename, size_t height, size_t width) {
+ull** read_matrix(const string &filename, size_t height, size_t width) {
     ifstream in;
     in.open(filename);
     if (!in.is_open()) {
@@ -41,14 +43,14 @@ uint64_t** read_matrix(const string &filename, size_t height, size_t width) {
         cerr << "Failed to open input file" << endl;
         throw bad_exception();
     }
-    uint64_t bit;
+    ull bit;
     size_t chunks = width / CHUNK_SIZE + 1 - (width % CHUNK_SIZE == 0);
 
-    uint64_t** matrix = new uint64_t*[height];
+    ull** matrix = new ull*[height];
     for (size_t i = 0; i < height; i++) {
-        uint64_t* row = new uint64_t[chunks];
+        ull* row = new ull[chunks];
         for (size_t j = 0; j < chunks; j++) {
-            uint64_t chunk = 0;
+            ull chunk = 0;
             for (size_t k = 1;
                  (k <= CHUNK_SIZE) && (j * CHUNK_SIZE + k <= width); k++) {
                 if (!(in >> bit)) {
@@ -70,7 +72,7 @@ uint64_t** read_matrix(const string &filename, size_t height, size_t width) {
     return matrix;
 }
 
-void print_matrix(ostream &os, uint64_t** bm,
+void print_matrix(ostream &os, ull** bm,
                     size_t height, size_t width) {
     size_t chunks = width / CHUNK_SIZE + 1 - (width % CHUNK_SIZE == 0);
 
@@ -87,7 +89,7 @@ void print_matrix(ostream &os, uint64_t** bm,
         }
         size_t bits_left = width-(chunks-1)*CHUNK_SIZE;
         for (size_t j = 0; j < bits_left; j++) {
-            os << ((bm[i][chunks-1] >> (CHUNK_SIZE - j - 1)) & uint64_t(1));
+            os << ((bm[i][chunks-1] >> (CHUNK_SIZE - j - 1)) & ull(1));
         }
         os << endl;
     }
