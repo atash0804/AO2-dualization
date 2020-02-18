@@ -96,4 +96,58 @@ void print_matrix(ostream &os, ull** bm,
     os << endl << flush;
 }
 
+bool has_zero_rows(ull** mat, size_t height, size_t width) {
+    bool is_zero;
+    for (size_t h = 0; h < height; h++) {
+        is_zero = true;
+        for (size_t w = 0; w < (width-1) / CHUNK_SIZE + 1; w++) {
+            if (mat[h][w]) {
+                is_zero = false;
+                break;
+            }
+        }
+        if (is_zero) return true;
+    }
+    return false;
+}
+
+uint64_t basic_dualization(c_int n, c_int m, ull** R) {
+    if (m > CH_SIZE_1) {
+        std::cout << "TOO HARD FOR BASIC DUALIZATION" << '\n';
+        return 0;
+    }
+    vector<ull> found_coverages;
+    bool is_minimal, is_coverage;
+    ull j;
+    for (ull num = 1; num < (ull(1) << m); num++) {
+        j = num << (CH_SIZE - m);
+        is_minimal = is_coverage = true;
+        for (ull cov: found_coverages) {
+            if ((j & cov) == cov) {
+                is_minimal = false;
+                break;
+            }
+        }
+        if (!is_minimal) continue;
+        for (c_int i = 0; i < n; i++) {
+            if (!(j & R[i][0])) {
+                is_coverage = false;
+                break;
+            }
+        }
+        if (!is_coverage) continue;
+        for (uint64_t i = 0; i < found_coverages.size(); i++) {
+            if ((j & found_coverages[i]) == j) {
+                found_coverages[i] = ull(-1);
+            }
+        }
+        found_coverages.push_back(j);
+    }
+    uint64_t count_cov = 0;
+    for (ull cov: found_coverages) {
+        if (cov != ull(-1)) count_cov++;
+    }
+    return count_cov;
+}
+
 #endif
