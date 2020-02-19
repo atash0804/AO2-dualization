@@ -131,7 +131,7 @@ protected:
     }
 
     //! Find non-zero element of B with the least index
-    Coord find_the_least() {
+    virtual Coord find_the_least() {
         c_int least_d1 = -1;
         c_int least_d2 = -1;
         for (c_int j = 0; j < col_chunks; j++) {
@@ -275,6 +275,10 @@ public:
         for (; !not_cov_rows.empty(); not_cov_rows.pop()) {
             delete [] not_cov_rows.top();
         }
+
+        for (; !deleted_by_domination.empty(); deleted_by_domination.pop()) {
+            delete [] deleted_by_domination.top();
+        }
     }
 
     //! Checks that all rows not covered by Q can be covered by H(B)
@@ -324,18 +328,19 @@ public:
     //! Complete the trajectory
     /*! Builds the trajectory up to a point when it corresponds to coverage and
     is therefore complete. */
-    void complete_trajectory() {
+    virtual void complete_trajectory() {
         while (!check_empty()) {
             eliminate_dominating_rows();
             Coord candidate = find_the_least();
-            Q.push_back(candidate);eliminate_incompatible(candidate);
+            Q.push_back(candidate);
+            eliminate_incompatible(candidate);
         }
     }
 
     //! Checks if Q that was created is upper covering set
     /*! Only upper covering sets add coverages to results. That is done to
     avoid multiple copies of one coverage. */
-    bool check_upper() {
+    virtual bool check_upper() {
         ull *mask = new ull[col_chunks]();
         for (Coord item: Q) {
             mask[item.second/CH_SIZE] |= ull(1) << (CH_SIZE_1 - item.second % CH_SIZE);
@@ -388,7 +393,7 @@ public:
     }
 
     uint64_t get_changes_size() {
-        return this->changes.size();
+        return changes.size();
     }
 };
 

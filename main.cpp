@@ -34,19 +34,22 @@ void AO2(c_int n, c_int m, ull** R, uint64_t & n_cov, uint64_t& n_extra, uint64_
 }
 
 int main(int argc, char *argv[]) {
-    srand(time(NULL));
-
     c_int HEIGHT = 20;
     c_int WIDTH = 20;
-    double SPARSITY = 0.5;
+    double SPARSITY = 0.3;
 
+    srand(time(NULL));
     double elapsed = 0;
     uint64_t n_cov = 0;
     uint64_t n_extra = 0;
     uint64_t n_steps = 0;
-
-    // generate_matrix(HEIGHT, WIDTH, "matrix.txt", SPARSITY);
+    generate_matrix(HEIGHT, WIDTH, "matrix.txt", SPARSITY);
     ull** R = read_matrix("matrix.txt", HEIGHT, WIDTH);
+
+    if (has_zero_rows(R, HEIGHT, WIDTH)) {
+        std::cout << "Matrix contains zero rows \n" << std::endl;
+        return 1;
+    }
 
     clock_t start = clock();
 
