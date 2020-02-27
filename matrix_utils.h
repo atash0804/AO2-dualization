@@ -111,7 +111,7 @@ bool has_zero_rows(ull** mat, size_t height, size_t width) {
     return false;
 }
 
-uint64_t basic_dualization(c_int n, c_int m, ull** R) {
+uint64_t basic_dualization(coord n, coord m, ull** R) {
     if (m > CH_SIZE_1) {
         std::cout << "TOO HARD FOR BASIC DUALIZATION" << '\n';
         return 0;
@@ -129,7 +129,7 @@ uint64_t basic_dualization(c_int n, c_int m, ull** R) {
             }
         }
         if (!is_minimal) continue;
-        for (c_int i = 0; i < n; i++) {
+        for (coord i = 0; i < n; i++) {
             if (!(j & R[i][0])) {
                 is_coverage = false;
                 break;

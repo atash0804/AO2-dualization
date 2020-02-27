@@ -10,12 +10,19 @@
 #include "matrix_utils.h"
 
 typedef uint32_t ull; // typedef for chunks in which matrix is stored
-typedef uint32_t c_int; // typedef for matrix shape and coordinates
+typedef uint32_t coord; // typedef for matrix shape and coordinates and shape-like values
+// typedef for status of row:
+// 0: not covered
+// 1: deleted as dominating
+// 2: covered, is not competing
+// 3: covered, is competing (all competing rows are covered by definition)
+typedef uint8_t st;
+
 
 typedef std::stack<ull**> BMatrixStack;
-typedef std::pair<c_int, c_int> Coord;
-typedef std::vector<Coord> QVector;
-typedef std::vector<std::vector<c_int>> CovCollector;
+typedef std::pair<coord, coord> Element;
+typedef std::vector<Element> QVector;
+typedef std::vector<std::vector<coord>> CovCollector;
 typedef std::stack<ull*> RowSetStack;
 
 enum {
@@ -32,10 +39,10 @@ enum {
 */
 class AO2Trajectory {
 protected:
-    c_int n; //!< First dimension of matrix
-    c_int m; //!< Second dimension of matrix
-    c_int col_chunks;
-    c_int row_chunks;
+    coord n; //!< First dimension of matrix
+    coord m; //!< Second dimension of matrix
+    coord col_chunks;
+    coord row_chunks;
 
     //! Stores initial state of matrix
     ull** M;
@@ -62,9 +69,9 @@ protected:
 
     //! Checks if B matrix is empty (Stopping criterion)
     bool check_empty() {
-        for (c_int i = 0; i < n; i++) {
+        for (coord i = 0; i < n; i++) {
             if (!B[i]) continue;
-            for (c_int j = 0; j < col_chunks; j++) {
+            for (coord j = 0; j < col_chunks; j++) {
                 if (B[i][j]) return false;
             }
         }
@@ -76,34 +83,34 @@ protected:
     void eliminate_dominating_rows() {
         ull **updated_B = new ull*[n];
         bool i1_dom_i2, i2_dom_i1;
-        for (c_int i1 = 0; i1 < n; i1++) {
+        for (coord i1 = 0; i1 < n; i1++) {
             if (!B[i1]) {
                 updated_B[i1] = NULL;
                 continue;
             } else {
                 updated_B[i1] = new ull[col_chunks]();
-                for (c_int j = 0; j < col_chunks; j++) updated_B[i1][j] = B[i1][j];
+                for (coord j = 0; j < col_chunks; j++) updated_B[i1][j] = B[i1][j];
             }
         }
         ull *H_B = new ull[col_chunks]();
-        for (c_int i = 0; i < n; i++) {
+        for (coord i = 0; i < n; i++) {
             if (!B[i]) continue;
-            for (c_int j = 0; j < col_chunks; j++) {
+            for (coord j = 0; j < col_chunks; j++) {
                 H_B[j] |= B[i][j];
             }
         }
 
         ull* new_del = new ull[row_chunks];
-        for (c_int i = 0; i < row_chunks; i++) {
+        for (coord i = 0; i < row_chunks; i++) {
             new_del[i] = deleted_by_domination.top()[i];
         }
 
-        for (c_int i1 = 0; i1 < n; i1++) {
+        for (coord i1 = 0; i1 < n; i1++) {
             if (!B[i1] || (!(not_cov_rows.top()[i1/CH_SIZE] & (ull(1) << (CH_SIZE_1-i1%CH_SIZE))))) continue;
-            for (c_int i2 = i1+1; i2 < n; i2++) {
+            for (coord i2 = i1+1; i2 < n; i2++) {
                 if (!B[i2] || (!(not_cov_rows.top()[i2/CH_SIZE] & (ull(1) << (CH_SIZE_1-i2%CH_SIZE))))) continue;
                 i1_dom_i2 = i2_dom_i1 = true;
-                for (c_int j = 0; j < col_chunks; j++) {
+                for (coord j = 0; j < col_chunks; j++) {
                     if ((M[i2][j] & M[i1][j] & H_B[j]) != (M[i1][j] & H_B[j])) i2_dom_i1 = false;
                     if ((M[i1][j] & M[i2][j] & H_B[j]) != (M[i2][j] & H_B[j])) i1_dom_i2 = false;
                     if (!(i2_dom_i1 || i1_dom_i2)) break;
@@ -123,7 +130,7 @@ protected:
             }
         }
         delete [] H_B;
-        for (c_int i = 0; i < n; i++) delete [] B[i];
+        for (coord i = 0; i < n; i++) delete [] B[i];
         delete [] B;
         deleted_by_domination.push(new_del);
         B = updated_B;
@@ -131,20 +138,20 @@ protected:
     }
 
     //! Find non-zero element of B with the least index
-    virtual Coord find_the_least() {
-        c_int least_d1 = -1;
-        c_int least_d2 = -1;
-        for (c_int j = 0; j < col_chunks; j++) {
-            for (c_int i = 0; i < n; i++) {
+    virtual Element find_the_least() {
+        coord least_d1 = -1;
+        coord least_d2 = -1;
+        for (coord j = 0; j < col_chunks; j++) {
+            for (coord i = 0; i < n; i++) {
                 if (!B[i] || !B[i][j]) continue;
-                if (B[i][j] && (least_d2 > (j+1)*CH_SIZE - c_int(log2(B[i][j])) - 1)) {
+                if (B[i][j] && (least_d2 > (j+1)*CH_SIZE - coord(log2(B[i][j])) - 1)) {
                     least_d1 = i;
-                    least_d2 = (j+1)*CH_SIZE - c_int(log2(B[i][j])) - 1;
+                    least_d2 = (j+1)*CH_SIZE - coord(log2(B[i][j])) - 1;
                 }
             }
-            if (least_d1 != c_int(-1)) return Coord(least_d1, least_d2);
+            if (least_d1 != coord(-1)) return Element(least_d1, least_d2);
         }
-        return Coord(least_d1, least_d2);
+        return Element(least_d1, least_d2);
     }
 
     //! Create delta_ij set
@@ -155,34 +162,34 @@ protected:
     B_kj. If it equals 1, all 1s of the row are incomatible. Otherwise, if
     B_kj = 0, the incomatible elements are all 1s from B_k & B_i (elementwise
     conjunction of two rows)*/
-    void eliminate_incompatible(Coord& element) {
+    void eliminate_incompatible(Element& el) {
         ull **updated_B = new ull*[n];
         ull* new_cov = new ull[row_chunks];
-        for (c_int i = 0; i < row_chunks; i++) {
+        for (coord i = 0; i < row_chunks; i++) {
             new_cov[i] = not_cov_rows.top()[i];
         }
 
-        for (c_int k = 0; k < n; k++) {
+        for (coord k = 0; k < n; k++) {
             if (!B[k]) {
-                if (M[k][element.second / CH_SIZE] & (ull(1) << (CH_SIZE_1 - element.second % CH_SIZE))) {
+                if (M[k][el.second / CH_SIZE] & (ull(1) << (CH_SIZE_1 - el.second % CH_SIZE))) {
                     new_cov[k/CH_SIZE] ^= new_cov[k/CH_SIZE] & ( ull(1) << (CH_SIZE_1 - k % CH_SIZE));
                 }
                 updated_B[k] = NULL;
                 continue;
             } else {
-                if (M[k][element.second / CH_SIZE] & (ull(1) << (CH_SIZE_1 - element.second % CH_SIZE))) {
+                if (M[k][el.second / CH_SIZE] & (ull(1) << (CH_SIZE_1 - el.second % CH_SIZE))) {
                     new_cov[k/CH_SIZE] ^= new_cov[k/CH_SIZE] & (ull(1) << (CH_SIZE_1 - k % CH_SIZE));
                     updated_B[k] = NULL;
                 } else {
                     updated_B[k] = new ull[col_chunks]();
-                    for (c_int j = 0; j < col_chunks; j++)
-                        updated_B[k][j] = B[k][j] ^ (B[k][j] & M[element.first][j]);
+                    for (coord j = 0; j < col_chunks; j++)
+                        updated_B[k][j] = B[k][j] ^ (B[k][j] & M[el.first][j]);
                 }
             }
         }
 
         ull* tmp = new ull[row_chunks];
-        for (c_int i = 0; i < row_chunks; i++) {
+        for (coord i = 0; i < row_chunks; i++) {
             tmp[i] = deleted_by_domination.top()[i];
         }
         deleted_by_domination.push(tmp);
@@ -198,7 +205,7 @@ protected:
         [...||delta_star_(t-1)||delta_ij_(t-1) + delta_star_(t) + latest_element|...]
 
         As delta_star_(t) is already applied to B, we should apply only latest_element*/
-    void update_stack(Coord& element) {
+    void update_stack(Element& el) {
         if (changes.size() > 0) {
             ull** latest_state = changes.top();
             changes.pop();
@@ -211,54 +218,54 @@ protected:
             deleted_by_domination.pop();
             deleted_by_domination.push(del_in_B);
 
-            for (c_int p = 0; p < n; p++) {
+            for (coord p = 0; p < n; p++) {
                 delete [] B[p];
             }
             delete [] B;
             B = latest_state;
-            B[element.first][element.second / CH_SIZE] ^= ull(1) << (CH_SIZE_1 - element.second % CH_SIZE);
+            B[el.first][el.second / CH_SIZE] ^= ull(1) << (CH_SIZE_1 - el.second % CH_SIZE);
         } else {
-            B[element.first][element.second / CH_SIZE] ^= ull(1) << (CH_SIZE_1 - element.second % CH_SIZE);
+            B[el.first][el.second / CH_SIZE] ^= ull(1) << (CH_SIZE_1 - el.second % CH_SIZE);
         }
         bool is_zero = true;
-        for (c_int j = 0; j < col_chunks; j++) {
-            if (B[element.first][j]) is_zero = false;
+        for (coord j = 0; j < col_chunks; j++) {
+            if (B[el.first][j]) is_zero = false;
         }
         if (is_zero) {
-            delete [] B[element.first];
-            B[element.first] = NULL;
+            delete [] B[el.first];
+            B[el.first] = NULL;
         }
         return;
     }
 public:
-    AO2Trajectory(c_int d1, c_int d2, ull** Matrix) {
+    AO2Trajectory(coord d1, coord d2, ull** Matrix) {
         n = d1;
         m = d2;
         col_chunks = (m-1) / CH_SIZE + 1;
         row_chunks = (n-1) / CH_SIZE + 1;
         B = new ull*[n];
         M = new ull*[n];
-        for (c_int i = 0; i < n; i++) {
+        for (coord i = 0; i < n; i++) {
             B[i] = new ull[col_chunks];
             M[i] = new ull[col_chunks];
-            for (c_int j = 0; j < col_chunks; j++) {
+            for (coord j = 0; j < col_chunks; j++) {
                 B[i][j] = M[i][j] = Matrix[i][j];
             }
         }
         ull* tmp = new ull[row_chunks];
-        for (c_int i = 0; i <  row_chunks; i++) {
+        for (coord i = 0; i <  row_chunks; i++) {
             tmp[i] = ull(-1);
         }
         not_cov_rows.push(tmp);
         tmp = new ull[row_chunks];
-        for (c_int i = 0; i <  row_chunks; i++) {
+        for (coord i = 0; i <  row_chunks; i++) {
             tmp[i] = ull(0);
         }
         deleted_by_domination.push(tmp);
     }
 
     ~AO2Trajectory() {
-        for (c_int i = 0; i < n; i++) {
+        for (coord i = 0; i < n; i++) {
             if (B[i]) delete [] B[i];
             if (M[i]) delete [] M[i];
         }
@@ -266,7 +273,7 @@ public:
         delete [] M;
 
         for (; !changes.empty(); changes.pop()) {
-            for (c_int i = 0; i < n; i++) {
+            for (coord i = 0; i < n; i++) {
                 delete [] changes.top()[i];
             }
             delete [] changes.top();
@@ -285,16 +292,16 @@ public:
     bool check_coverage() {
         bool is_empty;
         ull *H_B = new ull[col_chunks]();
-        for (c_int i = 0; i < n; i++) {
+        for (coord i = 0; i < n; i++) {
             if (!B[i]) continue;
-            for (c_int j = 0; j < col_chunks; j++) {
+            for (coord j = 0; j < col_chunks; j++) {
                 H_B[j] |= B[i][j];
             }
         }
-        for (c_int i = 0; i < n; i++) {
+        for (coord i = 0; i < n; i++) {
             if (!(not_cov_rows.top()[i/CH_SIZE] & (ull(1) << (CH_SIZE_1 - i % CH_SIZE)))) continue;// row i is covered
             is_empty = true;
-            for (c_int j = 0; j < col_chunks; j++) {
+            for (coord j = 0; j < col_chunks; j++) {
                 if (M[i][j] & H_B[j]) {
                     is_empty = false;
                     break;
@@ -317,7 +324,7 @@ public:
         while (Q.size() > 0) {
             delete [] not_cov_rows.top();
             not_cov_rows.pop(); // discard rows not covered by latest added element
-            Coord latest_element = Q.back(); // find latest added element
+            Element latest_element = Q.back(); // find latest added element
             Q.pop_back(); // discard latest added element
             update_stack(latest_element);
             if (check_coverage()) return true;
@@ -331,7 +338,7 @@ public:
     virtual void complete_trajectory() {
         while (!check_empty()) {
             eliminate_dominating_rows();
-            Coord candidate = find_the_least();
+            Element candidate = find_the_least();
             Q.push_back(candidate);
             eliminate_incompatible(candidate);
         }
@@ -342,15 +349,15 @@ public:
     avoid multiple copies of one coverage. */
     virtual bool check_upper() {
         ull *mask = new ull[col_chunks]();
-        for (Coord item: Q) {
+        for (Element item: Q) {
             mask[item.second/CH_SIZE] |= ull(1) << (CH_SIZE_1 - item.second % CH_SIZE);
         }
         bool valid;
-        for (Coord item: Q) {
-            for (c_int i = 0; i < item.first; i++) {
+        for (Element item: Q) {
+            for (coord i = 0; i < item.first; i++) {
                 if (deleted_by_domination.top()[i/CH_SIZE] & ull(1) << (CH_SIZE_1 - i % CH_SIZE)) continue;
                 valid = true;
-                for (c_int j = 0; j < col_chunks; j++) {
+                for (coord j = 0; j < col_chunks; j++) {
                     if ((M[i][j] & mask[j]) != (M[item.first][j] & mask[j])) {
                         valid = false;
                         break;
@@ -365,9 +372,9 @@ public:
     }
 
     //! Returns vector of columns which form Q
-    std::vector<c_int> get_coverage() {
-        std::vector<c_int> result;
-        for (Coord item: Q) {
+    std::vector<coord> get_coverage() {
+        std::vector<coord> result;
+        for (Element item: Q) {
             result.push_back(item.second);
         }
         return result;
@@ -375,12 +382,12 @@ public:
 
     void print_B() {
         std::cout << "+++++++++++++++++++++" << '\n';
-        for (c_int i = 0; i < n; i++) {
+        for (coord i = 0; i < n; i++) {
             if (!B[i]) {
                 std::cout << "NULL" << '\n';
                 continue;
             }
-            for (c_int j = 0; j < col_chunks-1; j++) {
+            for (coord j = 0; j < col_chunks-1; j++) {
                 std::cout << std::bitset<CH_SIZE>(B[i][j]) << ' ';
             }
             size_t bits_left = m-(col_chunks-1)*CH_SIZE;
@@ -405,18 +412,18 @@ public:
 class AO2Trajectory_delete_similar_cols: public AO2Trajectory {
 protected:
     std::vector<ull*> similar_cols;
-    std::vector<c_int> similar_cols_counter;
+    std::vector<coord> similar_cols_counter;
 public:
-    AO2Trajectory_delete_similar_cols(c_int d1, c_int d2, ull** Matrix) :
+    AO2Trajectory_delete_similar_cols(coord d1, coord d2, ull** Matrix) :
         AO2Trajectory(d1, d2, Matrix) {
         ull* mask;
         ull aij;
-        c_int counter, min_pos;
-        for (c_int col = 0; col < m; col++) {
+        coord counter, min_pos;
+        for (coord col = 0; col < m; col++) {
             mask = new ull[col_chunks]();
-            for (c_int i = 0; i < n; i++) {
+            for (coord i = 0; i < n; i++) {
                 aij = Matrix[i][col / CH_SIZE] & (ull(1) << (CH_SIZE_1 - col % CH_SIZE)) ? ull(-1) : ull(0);
-                for (c_int j = 0; j < col_chunks; j++) {
+                for (coord j = 0; j < col_chunks; j++) {
                     mask[j] |= aij ^ Matrix[i][j];
                 }
             }
@@ -426,9 +433,9 @@ public:
             // std::cout << std::bitset<32>(~mask[0]) << std::endl;
             min_pos = -1;
             bool has_similar = false;
-            for (c_int j = 0; j < col_chunks; j++) {
+            for (coord j = 0; j < col_chunks; j++) {
                 if (~mask[j]) {
-                    min_pos = (j + 1)* CH_SIZE - c_int(log2(~mask[j])) - 1;
+                    min_pos = (j + 1)* CH_SIZE - coord(log2(~mask[j])) - 1;
                     has_similar = true;
                     break;
                 }
@@ -436,14 +443,14 @@ public:
             counter = 1;
             if (has_similar) {
                 if (min_pos > col) {
-                    for (c_int i = 0; i < n; i++) {
-                        for (c_int j = 0; j < col_chunks; j++) {
+                    for (coord i = 0; i < n; i++) {
+                        for (coord j = 0; j < col_chunks; j++) {
                             B[i][j] &= mask[j];
                             M[i][j] &= mask[j];
                         }
                     }
                 }
-                for (c_int j = 0; j < col_chunks; j++) {
+                for (coord j = 0; j < col_chunks; j++) {
                     aij = ~mask[j];
                     while (aij) {
                         aij &= (aij - 1);
@@ -458,19 +465,125 @@ public:
     }
 
     ~AO2Trajectory_delete_similar_cols() {
-        for (c_int col = 0; col < m; col++) {
+        for (coord col = 0; col < m; col++) {
             delete [] similar_cols[col];
         }
     }
 
     uint64_t get_n_coverages() {
         uint64_t result = 1;
-        for (Coord item: Q) {
+        for (Element item: Q) {
             result *= similar_cols_counter[item.second];
             // if (similar_cols_counter[item.second] > 1) std::cout << result << ' ' << item.second << ' ' << std::bitset<32>(similar_cols[item.second][0]) << std::bitset<32>(similar_cols[item.second][1]) << std::endl;
         }
         return result;
     }
 };
+
+//! Class to represent changing trajectories
+/*!
+  This class implements the AO2 trajectory with an improvement:
+    Each step a it is checked that left elements can form an upper coverage
+*/
+class AO2Trajectory_stop_not_upper: public AO2Trajectory {
+public:
+    AO2Trajectory_stop_not_upper(coord d1, coord d2, ull** Matrix) :
+        AO2Trajectory(d1, d2, Matrix) {}
+
+    bool check_covers_comp_rows() {
+        // std::cout << "INTO COMPROWS\n" << std::flush;
+        ull *mask = new ull[col_chunks]();
+        for (Element item: Q) {
+            mask[item.second/CH_SIZE] |= ull(1) << (CH_SIZE_1 - item.second % CH_SIZE);
+        }
+
+        bool is_empty, valid;
+        for (coord i = 0; i < n; i++) {
+            // if row is not covered
+            if (not_cov_rows.top()[i/CH_SIZE] & (ull(1) << (CH_SIZE_1-i%CH_SIZE))) {
+                // std::cout << "1st BR\n" << std::flush;
+                is_empty = true;
+                for (coord i1 = 0; i1 < n; i1++) {
+                    if (!B[i1]) continue;
+                    for (coord j = 0; j < col_chunks; j++) {
+                        if (B[i1][j] & M[i][j]) {
+                            is_empty = false;
+                            break;
+                        }
+                    }
+                    if (!is_empty) break;
+                }
+
+                if (is_empty) {
+                    // std::cout << "OUT COMPROWS FAIL1\n" << std::flush;
+                    return false;
+                }
+            } else {
+                // std::cout << "2nd BR\n" << std::flush;
+                if (deleted_by_domination.top()[i/CH_SIZE] & ull(1) << (CH_SIZE_1 - i % CH_SIZE)) continue;
+                // check competing rows amongst those not deleted by domination
+                for (Element item: Q) {
+                    if (i >= item.first) continue;
+                    valid = true;
+                    for (coord j = 0; j < col_chunks; j++) {
+                        if ((M[i][j] & mask[j]) != (M[item.first][j] & mask[j])) {
+                            valid = false;
+                            break;
+                        }
+                    }
+                    // valid means that row i competes with row item.first
+                    if (valid) {
+                        is_empty = true;
+                        for (coord i1 = 0; i1 < n; i1++) {
+                            if (!B[i1]) continue;
+                            for (coord j = 0; j < col_chunks; j++) {
+                                if (B[i1][j] & M[i][j]) {
+                                    is_empty = false;
+                                    break;
+                                }
+                            }
+                            if (!is_empty) break;
+                        }
+                        if (is_empty) {
+                            // std::cout << "OUT COMPROWS FAIL2\n" << std::flush;
+                            return false;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        // std::cout << "OUT COMPROWS OK\n" << std::flush;
+        return true;
+    }
+
+    bool find_neighbour() {
+        while (Q.size() > 0) {
+            delete [] not_cov_rows.top();
+            not_cov_rows.pop(); // discard rows not covered by latest added element
+            Element latest_element = Q.back(); // find latest added element
+            Q.pop_back(); // discard latest added element
+            update_stack(latest_element);
+            if (check_covers_comp_rows()) return true;
+        }
+        return false;
+    }
+
+    void complete_trajectory() {
+        // std::cout << "INITIAL:\n";
+        // print_B();
+        while (!check_empty() && check_covers_comp_rows()) {
+            eliminate_dominating_rows();
+            // std::cout << "ELIM DM ROWS:\n";
+            // print_B();
+            Element candidate = find_the_least();
+            Q.push_back(candidate);
+            eliminate_incompatible(candidate);
+            // std::cout << "ELIM INCOMPAT:" << candidate.first << ' ' << candidate.second << "\n";
+            // print_B();
+        }
+    }
+};
+
 
 #endif

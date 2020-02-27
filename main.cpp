@@ -16,8 +16,8 @@
 ************************************************************/
 
 int main(int argc, char *argv[]) {
-    c_int HEIGHT = 20;
-    c_int WIDTH = 20;
+    coord HEIGHT = 50;
+    coord WIDTH = 50;
     double SPARSITY = 0.5;
 
     srand(time(NULL));
@@ -40,7 +40,7 @@ int main(int argc, char *argv[]) {
     clock_t stop = clock();
     elapsed += (double) (stop - start) / CLOCKS_PER_SEC;
 
-    for (c_int i = 0; i < HEIGHT; i++) {
+    for (coord i = 0; i < HEIGHT; i++) {
         delete [] R[i];
     }
     delete [] R;
