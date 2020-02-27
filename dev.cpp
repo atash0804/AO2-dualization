@@ -13,6 +13,18 @@
 *   algorithm
 ************************************************************/
 
+enum {
+    ST_IS_COV = 1, // row is covered
+    ST_IS_DOM = 2, // row is deleted by domination
+    ST_IS_COMP = 4, // row is competing
+
+    ST_EMPTY = 0, // row is not covered
+    ST_COV = 1, // row is covered
+    ST_DOM_NOT_COV = 2, // row is deleted by domination but not covered
+    ST_DOM_COV = 3, // row is deleted by domination but covered
+    ST_COMP = 5 // row is competing
+};
+
 //! Class to represent changing trajectories
 /*!
   This class implements the trajectory - sequence of changing pairs (B, Q),
@@ -39,16 +51,13 @@ protected:
     /*! Each change is represented as binary matrix of size mxn*/
     BMatrixStack changes;
 
-    //! Representation of set Q (elements that from the trajectory)
+    //! Stack of states of B rows
+    /*! Each state is represented as *st */
+    RowStatesStack states;
+
+    //! Representation of set Q (elements that form the trajectory)
     /*! Vector of pairs (i_r, j_r) which form the Q set*/
     QVector Q;
-
-    //! Stack to represent rows not covered by Q at each point
-    /*! Each element of this stack is set of row numbers, which correspond to
-    rows not covered by Q*/
-    RowSetStack not_cov_rows;
-
-    RowSetStack deleted_by_domination;
 
     //! Checks if B matrix is empty (Stopping criterion)
     bool check_empty() {
@@ -62,16 +71,10 @@ protected:
     }
 
     bool check_covers_comp_rows() {
-        // std::cout << "INTO COMPROWS\n" << std::flush;
-        ull *mask = new ull[col_chunks]();
-        for (Element item: Q) {
-            mask[item.second/CH_SIZE] |= ull(1) << (CH_SIZE_1 - item.second % CH_SIZE);
-        }
-
         bool is_empty, valid;
         for (coord i = 0; i < n; i++) {
             // if row is not covered
-            if (not_cov_rows.top()[i/CH_SIZE] & (ull(1) << (CH_SIZE_1-i%CH_SIZE))) {
+            if ((!(states.top()[i] & ST_IS_COV)) || (states.top()[i] == ST_COMP)) {
                 // std::cout << "1st BR\n" << std::flush;
                 is_empty = true;
                 for (coord i1 = 0; i1 < n; i1++) {
@@ -84,55 +87,21 @@ protected:
                     }
                     if (!is_empty) break;
                 }
-
                 if (is_empty) {
                     // std::cout << "OUT COMPROWS FAIL1\n" << std::flush;
                     return false;
                 }
-            } else {
-                // std::cout << "2nd BR\n" << std::flush;
-                if (deleted_by_domination.top()[i/CH_SIZE] & ull(1) << (CH_SIZE_1 - i % CH_SIZE)) continue;
-                // check competing rows amongst those not deleted by domination
-                for (Element item: Q) {
-                    if (i >= item.first) continue;
-                    valid = true;
-                    for (coord j = 0; j < col_chunks; j++) {
-                        if ((M[i][j] & mask[j]) != (M[item.first][j] & mask[j])) {
-                            valid = false;
-                            break;
-                        }
-                    }
-                    // valid means that row i competes with row item.first
-                    if (valid) {
-                        is_empty = true;
-                        for (coord i1 = 0; i1 < n; i1++) {
-                            if (!B[i1]) continue;
-                            for (coord j = 0; j < col_chunks; j++) {
-                                if (B[i1][j] & M[i][j]) {
-                                    is_empty = false;
-                                    break;
-                                }
-                            }
-                            if (!is_empty) break;
-                        }
-                        if (is_empty) {
-                            // std::cout << "OUT COMPROWS FAIL2\n" << std::flush;
-                            return false;
-                        }
-                        break;
-                    }
-                }
             }
         }
-        // std::cout << "OUT COMPROWS OK\n" << std::flush;
         return true;
     }
-
 
     //! Create delta_star set
     /*! Includes 1s from dominating rows which correspond to 0s in dominated row.*/
     void eliminate_dominating_rows() {
         ull **updated_B = new ull*[n];
+        st* updated_state = new st[n];
+        for (coord i = 0; i < n; i++) updated_state[i] = states.top()[i];
         bool i1_dom_i2, i2_dom_i1;
         for (coord i1 = 0; i1 < n; i1++) {
             if (!B[i1]) {
@@ -151,15 +120,11 @@ protected:
             }
         }
 
-        ull* new_del = new ull[row_chunks];
-        for (coord i = 0; i < row_chunks; i++) {
-            new_del[i] = deleted_by_domination.top()[i];
-        }
-
         for (coord i1 = 0; i1 < n; i1++) {
-            if (!B[i1] || (!(not_cov_rows.top()[i1/CH_SIZE] & (ull(1) << (CH_SIZE_1-i1%CH_SIZE))))) continue;
+            /// maybe just check state
+            if (!B[i1] || (states.top()[i1] & ST_IS_COV)) continue;
             for (coord i2 = i1+1; i2 < n; i2++) {
-                if (!B[i2] || (!(not_cov_rows.top()[i2/CH_SIZE] & (ull(1) << (CH_SIZE_1-i2%CH_SIZE))))) continue;
+                if (!B[i2] || (states.top()[i2] & ST_IS_COV)) continue;
                 i1_dom_i2 = i2_dom_i1 = true;
                 for (coord j = 0; j < col_chunks; j++) {
                     if ((M[i2][j] & M[i1][j] & H_B[j]) != (M[i1][j] & H_B[j])) i2_dom_i1 = false;
@@ -168,13 +133,13 @@ protected:
                 }
                 if (!(i2_dom_i1 || i1_dom_i2)) continue;
                 if (i2_dom_i1) {
-                    new_del[i2/CH_SIZE] ^= (~new_del[i2/CH_SIZE]) & ( ull(1) << (CH_SIZE_1 - i2 % CH_SIZE));
                     delete [] updated_B[i2];
+                    updated_state[i2] = (updated_state[i2] & 3) | ST_IS_DOM;
                     updated_B[i2] = NULL;
                 } else {
                     if (i1_dom_i2) {
-                        new_del[i1/CH_SIZE] ^= (~new_del[i1/CH_SIZE]) & ( ull(1) << (CH_SIZE_1 - i1 % CH_SIZE));
                         delete [] updated_B[i1];
+                        updated_state[i1] = (updated_state[i1] & 3) | ST_IS_DOM;
                         updated_B[i1] = NULL;
                     }
                 }
@@ -183,13 +148,13 @@ protected:
         delete [] H_B;
         for (coord i = 0; i < n; i++) delete [] B[i];
         delete [] B;
-        deleted_by_domination.push(new_del);
+        states.push(updated_state);
         B = updated_B;
         return;
     }
 
     //! Find non-zero element of B with the least index
-    virtual Element find_the_least() {
+    Element find_the_least() {
         coord least_d1 = -1;
         coord least_d2 = -1;
         for (coord j = 0; j < col_chunks; j++) {
@@ -213,23 +178,29 @@ protected:
     B_kj. If it equals 1, all 1s of the row are incomatible. Otherwise, if
     B_kj = 0, the incomatible elements are all 1s from B_k & B_i (elementwise
     conjunction of two rows)*/
-    void eliminate_incompatible(Element& el) {
+    bool eliminate_incompatible(Element& el) {
         ull **updated_B = new ull*[n];
-        ull* new_cov = new ull[row_chunks];
-        for (coord i = 0; i < row_chunks; i++) {
-            new_cov[i] = not_cov_rows.top()[i];
-        }
 
+        st* updated_state = new st[n];
+        for (coord i = 0; i < n; i++) updated_state[i] = states.top()[i];
+        bool has_comp = false, has_uncov = false;
         for (coord k = 0; k < n; k++) {
-            if (!B[k]) {
-                if (M[k][el.second / CH_SIZE] & (ull(1) << (CH_SIZE_1 - el.second % CH_SIZE))) {
-                    new_cov[k/CH_SIZE] ^= new_cov[k/CH_SIZE] & ( ull(1) << (CH_SIZE_1 - k % CH_SIZE));
+            if (M[k][el.second / CH_SIZE] & (ull(1) << (CH_SIZE_1 - el.second % CH_SIZE))) {
+                // selected column covers row k
+                switch (states.top()[k]) {
+                case ST_EMPTY:
+                    updated_state[k] = (k < el.first) ? ST_COMP : ST_COV;
+                    break;
+                case ST_DOM_NOT_COV:
+                    updated_state[k] = ST_DOM_COV;
+                    break;
+                case ST_COMP:
+                    updated_state[k] = ST_COV;
+                    break;
                 }
                 updated_B[k] = NULL;
-                continue;
             } else {
-                if (M[k][el.second / CH_SIZE] & (ull(1) << (CH_SIZE_1 - el.second % CH_SIZE))) {
-                    new_cov[k/CH_SIZE] ^= new_cov[k/CH_SIZE] & (ull(1) << (CH_SIZE_1 - k % CH_SIZE));
+                if (!B[k]) {
                     updated_B[k] = NULL;
                 } else {
                     updated_B[k] = new ull[col_chunks]();
@@ -237,17 +208,19 @@ protected:
                         updated_B[k][j] = B[k][j] ^ (B[k][j] & M[el.first][j]);
                 }
             }
-        }
 
-        ull* tmp = new ull[row_chunks];
-        for (coord i = 0; i < row_chunks; i++) {
-            tmp[i] = deleted_by_domination.top()[i];
+            if (updated_state[k] == ST_COMP) has_comp = true;
+            if (!(updated_state[k] & ST_IS_COV)) {
+                has_uncov = true;
+            }
         }
-        deleted_by_domination.push(tmp);
-        not_cov_rows.push(new_cov);
+        states.push(updated_state);
         changes.push(B);
         B = updated_B;
-        return;
+        if ((!has_uncov) && has_comp) {
+            return false;
+        }
+        return true;
     }
 
     //! Update B stack and B itself while finding a neighbouring trajectory
@@ -257,27 +230,24 @@ protected:
 
         As delta_star_(t) is already applied to B, we should apply only latest_element*/
     void update_stack(Element& el) {
-        if (changes.size() > 0) {
-            ull** latest_state = changes.top();
-            changes.pop();
+        ull** latest_state = changes.top();
+        changes.pop();
 
-            delete [] deleted_by_domination.top();
-            deleted_by_domination.pop();
-            ull* del_in_B = deleted_by_domination.top();
-            deleted_by_domination.pop();
-            delete [] deleted_by_domination.top();
-            deleted_by_domination.pop();
-            deleted_by_domination.push(del_in_B);
+        delete [] states.top();
+        states.pop();
+        st* B_state = states.top();
+        states.pop();
+        delete [] states.top();
+        states.pop();
+        states.push(B_state);
 
-            for (coord p = 0; p < n; p++) {
-                delete [] B[p];
-            }
-            delete [] B;
-            B = latest_state;
-            B[el.first][el.second / CH_SIZE] ^= ull(1) << (CH_SIZE_1 - el.second % CH_SIZE);
-        } else {
-            B[el.first][el.second / CH_SIZE] ^= ull(1) << (CH_SIZE_1 - el.second % CH_SIZE);
+        for (coord p = 0; p < n; p++) {
+            delete [] B[p];
         }
+        delete [] B;
+        B = latest_state;
+        B[el.first][el.second / CH_SIZE] ^= ull(1) << (CH_SIZE_1 - el.second % CH_SIZE);
+
         bool is_zero = true;
         for (coord j = 0; j < col_chunks; j++) {
             if (B[el.first][j]) is_zero = false;
@@ -303,16 +273,9 @@ public:
                 B[i][j] = M[i][j] = Matrix[i][j];
             }
         }
-        ull* tmp = new ull[row_chunks];
-        for (coord i = 0; i <  row_chunks; i++) {
-            tmp[i] = ull(-1);
-        }
-        not_cov_rows.push(tmp);
-        tmp = new ull[row_chunks];
-        for (coord i = 0; i <  row_chunks; i++) {
-            tmp[i] = ull(0);
-        }
-        deleted_by_domination.push(tmp);
+
+        st* tmp = new st[n]();
+        states.push(tmp);
     }
 
     ~AO2ZeroTrajectory() {
@@ -330,41 +293,9 @@ public:
             delete [] changes.top();
         }
 
-        for (; !not_cov_rows.empty(); not_cov_rows.pop()) {
-            delete [] not_cov_rows.top();
+        for (; !states.empty(); states.pop()) {
+            delete [] states.top();
         }
-
-        for (; !deleted_by_domination.empty(); deleted_by_domination.pop()) {
-            delete [] deleted_by_domination.top();
-        }
-    }
-
-    //! Checks that all rows not covered by Q can be covered by H(B)
-    bool check_coverage() {
-        bool is_empty;
-        ull *H_B = new ull[col_chunks]();
-        for (coord i = 0; i < n; i++) {
-            if (!B[i]) continue;
-            for (coord j = 0; j < col_chunks; j++) {
-                H_B[j] |= B[i][j];
-            }
-        }
-        for (coord i = 0; i < n; i++) {
-            if (!(not_cov_rows.top()[i/CH_SIZE] & (ull(1) << (CH_SIZE_1 - i % CH_SIZE)))) continue;// row i is covered
-            is_empty = true;
-            for (coord j = 0; j < col_chunks; j++) {
-                if (M[i][j] & H_B[j]) {
-                    is_empty = false;
-                    break;
-                }
-            }
-            if (is_empty) {
-                delete [] H_B;
-                return false;
-            }
-        }
-        delete [] H_B;
-        return true;
     }
 
     //! Find a neighbour for constructed trajectory
@@ -373,8 +304,6 @@ public:
     is appended to the neighbour.*/
     bool find_neighbour() {
         while (Q.size() > 0) {
-            delete [] not_cov_rows.top();
-            not_cov_rows.pop(); // discard rows not covered by latest added element
             Element latest_element = Q.back(); // find latest added element
             Q.pop_back(); // discard latest added element
             update_stack(latest_element);
@@ -386,44 +315,31 @@ public:
     //! Complete the trajectory
     /*! Builds the trajectory up to a point when it corresponds to coverage and
     is therefore complete. */
-    void complete_trajectory() {
+    bool complete_trajectory() {
         // std::cout << "INITIAL:\n";
         // print_B();
-        while (!check_empty() && check_covers_comp_rows()) {
+        while (!check_empty()) {
+            if (!check_covers_comp_rows()) return false;
             eliminate_dominating_rows();
             // std::cout << "ELIM DM ROWS:\n";
             // print_B();
             Element candidate = find_the_least();
             Q.push_back(candidate);
-            eliminate_incompatible(candidate);
+            if (!eliminate_incompatible(candidate)) {
+                return false;
+            }
             // std::cout << "ELIM INCOMPAT:" << candidate.first << ' ' << candidate.second << "\n";
             // print_B();
         }
+        return true;
     }
 
     //! Checks if Q that was created is upper covering set
     /*! Only upper covering sets add coverages to results. That is done to
     avoid multiple copies of one coverage. */
-    virtual bool check_upper() {
-        ull *mask = new ull[col_chunks]();
-        for (Element item: Q) {
-            mask[item.second/CH_SIZE] |= ull(1) << (CH_SIZE_1 - item.second % CH_SIZE);
-        }
-        bool valid;
-        for (Element item: Q) {
-            for (coord i = 0; i < item.first; i++) {
-                if (deleted_by_domination.top()[i/CH_SIZE] & ull(1) << (CH_SIZE_1 - i % CH_SIZE)) continue;
-                valid = true;
-                for (coord j = 0; j < col_chunks; j++) {
-                    if ((M[i][j] & mask[j]) != (M[item.first][j] & mask[j])) {
-                        valid = false;
-                        break;
-                    }
-                }
-                if (valid) {
-                    return false;
-                }
-            }
+    bool check_upper() {
+        for (coord i = 0; i < n; i++) {
+            if (states.top()[i] == ST_COMP) return false;
         }
         return true;
     }
@@ -441,17 +357,34 @@ public:
         std::cout << "+++++++++++++++++++++" << '\n';
         for (coord i = 0; i < n; i++) {
             if (!B[i]) {
-                std::cout << "NULL" << '\n';
-                continue;
+                std::cout << "NULL";
+            } else {
+                for (coord j = 0; j < col_chunks-1; j++) {
+                    std::cout << std::bitset<CH_SIZE>(B[i][j]) << ' ';
+                }
+                size_t bits_left = m-(col_chunks-1)*CH_SIZE;
+                for (size_t j = 0; j < bits_left; j++) {
+                    std::cout << ((B[i][col_chunks-1] >> (CH_SIZE_1 - j)) & ull(1));
+                }
             }
-            for (coord j = 0; j < col_chunks-1; j++) {
-                std::cout << std::bitset<CH_SIZE>(B[i][j]) << ' ';
+            switch (states.top()[i]) {
+            case ST_EMPTY:
+                std::cout << "(NOT COV)\n";
+                break;
+            case ST_DOM_NOT_COV:
+                std::cout << "(NOT COV, DEL AS DOM)\n";
+                break;
+            case ST_DOM_COV:
+                std::cout << "(COV, DEL AS DOM)\n";
+                break;
+            case ST_COV:
+                std::cout << "(COVERED)\n";
+                break;
+            case ST_COMP:
+                std::cout << "(COMPETES)\n";
+                break;
             }
-            size_t bits_left = m-(col_chunks-1)*CH_SIZE;
-            for (size_t j = 0; j < bits_left; j++) {
-                std::cout << ((B[i][col_chunks-1] >> (CH_SIZE_1 - j)) & ull(1));
-            }
-            std::cout << std::endl;
+
         }
         std::cout << "+++++++++++++++++++++" << '\n' << std::flush;
     }
@@ -465,19 +398,14 @@ public:
 void AO2Zero(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, uint64_t& n_steps) {
     uint64_t len_last = 0;
     CovCollector coverages;
-    AO2Trajectory_stop_not_upper traj(n, m, R);
+    AO2ZeroTrajectory traj(n, m, R);
     do {
         len_last = traj.get_changes_size();
-        traj.complete_trajectory();
-        n_steps += traj.get_changes_size() - len_last;
-        if (traj.check_upper()) {
+        if (traj.complete_trajectory()) {
             coverages.push_back(traj.get_coverage());
-            // std::cout << "COVERAGE" << '\n';
-            // for (auto q: traj.get_coverage()) std::cout << q << ' ';
-            // std::cout << '\n';
-        } else {
-            n_extra++;
-        };
+        }
+        n_steps += traj.get_changes_size() - len_last;
+
     } while (traj.find_neighbour());
     n_cov += coverages.size();
 }

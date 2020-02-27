@@ -18,8 +18,8 @@ typedef uint32_t coord; // typedef for matrix shape and coordinates and shape-li
 // 3: covered, is competing (all competing rows are covered by definition)
 typedef uint8_t st;
 
-
 typedef std::stack<ull**> BMatrixStack;
+typedef std::stack<st*> RowStatesStack;
 typedef std::pair<coord, coord> Element;
 typedef std::vector<Element> QVector;
 typedef std::vector<std::vector<coord>> CovCollector;
