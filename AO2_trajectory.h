@@ -397,4 +397,80 @@ public:
     }
 };
 
+//! Class to represent changing trajectories
+/*!
+  This class implements the AO2 trajectory with an improvement:
+    similar columns are deleted in constructor.
+*/
+class AO2Trajectory_delete_similar_cols: public AO2Trajectory {
+protected:
+    std::vector<ull*> similar_cols;
+    std::vector<c_int> similar_cols_counter;
+public:
+    AO2Trajectory_delete_similar_cols(c_int d1, c_int d2, ull** Matrix) :
+        AO2Trajectory(d1, d2, Matrix) {
+        ull* mask;
+        ull aij;
+        c_int counter, min_pos;
+        for (c_int col = 0; col < m; col++) {
+            mask = new ull[col_chunks]();
+            for (c_int i = 0; i < n; i++) {
+                aij = Matrix[i][col / CH_SIZE] & (ull(1) << (CH_SIZE_1 - col % CH_SIZE)) ? ull(-1) : ull(0);
+                for (c_int j = 0; j < col_chunks; j++) {
+                    mask[j] |= aij ^ Matrix[i][j];
+                }
+            }
+            mask[row_chunks - 1] |= ull(-1) >> (m % CH_SIZE);
+            mask[col / CH_SIZE] |= ull(1) << (CH_SIZE_1 - col % CH_SIZE);
+
+            // std::cout << std::bitset<32>(~mask[0]) << std::endl;
+            min_pos = -1;
+            bool has_similar = false;
+            for (c_int j = 0; j < col_chunks; j++) {
+                if (~mask[j]) {
+                    min_pos = (j + 1)* CH_SIZE - c_int(log2(~mask[j])) - 1;
+                    has_similar = true;
+                    break;
+                }
+            }
+            counter = 1;
+            if (has_similar) {
+                if (min_pos > col) {
+                    for (c_int i = 0; i < n; i++) {
+                        for (c_int j = 0; j < col_chunks; j++) {
+                            B[i][j] &= mask[j];
+                            M[i][j] &= mask[j];
+                        }
+                    }
+                }
+                for (c_int j = 0; j < col_chunks; j++) {
+                    aij = ~mask[j];
+                    while (aij) {
+                        aij &= (aij - 1);
+                        counter++;
+                    }
+                }
+                // if (counter > 1) std::cout << "DELETED COLS" << counter << "\n";
+            }
+            similar_cols.push_back(mask);
+            similar_cols_counter.push_back(counter);
+        }
+    }
+
+    ~AO2Trajectory_delete_similar_cols() {
+        for (c_int col = 0; col < m; col++) {
+            delete [] similar_cols[col];
+        }
+    }
+
+    uint64_t get_n_coverages() {
+        uint64_t result = 1;
+        for (Coord item: Q) {
+            result *= similar_cols_counter[item.second];
+            // if (similar_cols_counter[item.second] > 1) std::cout << result << ' ' << item.second << ' ' << std::bitset<32>(similar_cols[item.second][0]) << std::bitset<32>(similar_cols[item.second][1]) << std::endl;
+        }
+        return result;
+    }
+};
+
 #endif
