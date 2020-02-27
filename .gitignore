@@ -7,3 +7,5 @@ dev
 gmon.out
 main
 matrix.txt
+profile
+*.csv

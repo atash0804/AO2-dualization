@@ -200,6 +200,18 @@ public:
         return true;
     }
 
+    bool find_neighbour() {
+        while (Q.size() > 0) {
+            delete [] not_cov_rows.top();
+            not_cov_rows.pop(); // discard rows not covered by latest added element
+            Coord latest_element = Q.back(); // find latest added element
+            Q.pop_back(); // discard latest added element
+            update_stack(latest_element);
+            if (check_covers_comp_rows()) return true;
+        }
+        return false;
+    }
+
     void complete_trajectory() {
         // std::cout << "INITIAL:\n";
         // print_B();

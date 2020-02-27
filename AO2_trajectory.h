@@ -313,7 +313,7 @@ public:
     /*! Neighbour is the longest possible prefix of trajectory that can be used
     to construct a coverage. If the prefix ends with (B_t, Q_t), (B_t, Q_(t-1))
     is appended to the neighbour.*/
-    bool find_neighbour() {
+    virtual bool find_neighbour() {
         while (Q.size() > 0) {
             delete [] not_cov_rows.top();
             not_cov_rows.pop(); // discard rows not covered by latest added element
