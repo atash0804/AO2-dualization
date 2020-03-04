@@ -64,4 +64,26 @@ void AO2_stop_not_upper(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n
     n_cov += coverages.size();
 }
 
+
+//! Implementation of AO2 algorithm with zero extra steps
+void AO2Zero(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, uint64_t& n_steps) {
+    uint64_t len_last = 0;
+    CovCollector coverages;
+    AO2ZeroTrajectory traj(n, m, R);
+    do {
+        len_last = traj.get_changes_size();
+        if (traj.complete_trajectory()) {
+            coverages.push_back(traj.get_coverage());
+            // std::cout << "COVERAGE" << '\n';
+            // for (auto q: traj.get_coverage()) std::cout << q << ' ';
+            // std::cout << '\n';
+        } else {
+            n_extra++;
+        }
+        n_steps += traj.get_changes_size() - len_last;
+
+    } while (traj.find_neighbour());
+    n_cov += coverages.size();
+}
+
 #endif

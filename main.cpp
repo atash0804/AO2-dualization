@@ -16,8 +16,8 @@
 ************************************************************/
 
 int main(int argc, char *argv[]) {
-    coord HEIGHT = 50;
-    coord WIDTH = 50;
+    coord HEIGHT = 10;
+    coord WIDTH = 10;
     double SPARSITY = 0.5;
 
     srand(time(NULL));
@@ -27,6 +27,9 @@ int main(int argc, char *argv[]) {
     uint64_t n_steps = 0;
     // generate_matrix(HEIGHT, WIDTH, "matrix.txt", SPARSITY);
     ull** R = read_matrix("matrix.txt", HEIGHT, WIDTH);
+
+    // cout << basic_dualization(HEIGHT, WIDTH, R) << endl;
+    // return 0;
 
     if (has_zero_rows(R, HEIGHT, WIDTH)) {
         std::cout << "Matrix contains zero rows \n" << std::endl;
