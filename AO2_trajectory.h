@@ -959,4 +959,133 @@ public:
 };
 
 
+class AO2MplusTrajectory: public AO2ZeroTrajectory {
+public:
+    AO2MplusTrajectory(coord d1, coord d2, ull** Matrix) :
+        AO2ZeroTrajectory(d1, d2, Matrix) {}
+protected:
+    virtual Element find_the_least() {
+        coord least_d1 = -1;
+        coord least_d2 = -1;
+        coord least_Er = n*m+1, curr_Er;
+        coord *columns = new coord[m]();
+
+        for (coord i = 0; i < n; i++) {
+            if (!B[i]) continue;
+            for (coord j = 0; j < m; j++) {
+                if (B[i][j/CH_SIZE] & (ull(1) << (CH_SIZE_1 - j % CH_SIZE))) columns[j]++;
+            }
+        }
+
+        for (coord i = 0; i < n; i++) {
+            // if row is not covered or is competing
+            if (!(states.top()[i] & ST_IS_COV) || states.top()[i] & ST_IS_COMP) {
+                curr_Er = 0;
+                for (coord j = 0; j < m; j++) {
+                    if (M[i][j/CH_SIZE] & (ull(1) << (CH_SIZE_1 - j % CH_SIZE))) curr_Er += columns[j];
+                }
+                // cout << curr_Er << "***********\n";
+                if (curr_Er < least_Er) {
+                    least_d1 = -1;
+                    least_d2 = -1;
+                    for (coord i1 = 0; i1 < n; i1++) {
+                        if (!B[i1]) continue;
+                        for (coord j1 = 0; j1 < col_chunks; j1++) {
+                            // cout << bitset<32>(B[i1][j1]) << ' ' << bitset<32>(B[i1][j1]&M[i][j1]) << '\n';
+                            // cout << least_d2 << ' ' << (j1+1)*CH_SIZE - coord(log2(B[i1][j1])) - 1;
+                            // cout << "_________\n";
+                            if (B[i1][j1] && (B[i1][j1]&M[i][j1]) && (least_d2 > (j1+1)*CH_SIZE - coord(log2(B[i1][j1]&M[i][j1])) - 1)) {
+
+                                least_d1 = i1;
+                                least_d2 = (j1+1)*CH_SIZE - coord(log2(B[i1][j1]&M[i][j1])) - 1;
+                                least_Er = curr_Er;
+                                // cout << "NEW " << least_d1 << ' ' << least_d2 << endl;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // cout << endl;
+        delete [] columns;
+        return Element(least_d1, least_d2);
+    }
+
+public:
+    bool complete_trajectory() {
+        while (!check_empty()) {
+            if (!check_covers_comp_rows()) return false;
+            eliminate_dominating_rows();
+            if (!check_covers_comp_rows() || check_empty()) {
+                delete [] states.top();
+                states.pop();
+                return false;
+            }
+            Element candidate = find_the_least();
+            Q.push_back(candidate);
+            if (!eliminate_incompatible(candidate)) {
+                return false;
+            }
+        }
+        return true;
+    }
+};
+
+
+// AO2MlightestTrajectory selects ones from least |E_r|, beginning from the lightest col
+class AO2MlightestTrajectory: public AO2MplusTrajectory {
+public:
+    AO2MlightestTrajectory(coord d1, coord d2, ull** Matrix) :
+        AO2MplusTrajectory(d1, d2, Matrix) {}
+protected:
+    virtual Element find_the_least() {
+        coord least_d1 = -1;
+        coord least_d2 = -1;
+        coord least_Er = n*m+1, curr_Er;
+        coord min_weight_col;
+        coord *columns = new coord[m]();
+
+        bool is_set;
+
+        for (coord i = 0; i < n; i++) {
+            if (!B[i]) continue;
+            for (coord j = 0; j < m; j++) {
+                if (B[i][j/CH_SIZE] & (ull(1) << (CH_SIZE_1 - j % CH_SIZE))) columns[j]++;
+            }
+        }
+
+        for (coord i = 0; i < n; i++) {
+            // if row is not covered or is competing
+            if (!(states.top()[i] & ST_IS_COV) || states.top()[i] & ST_IS_COMP) {
+                curr_Er = 0;
+                is_set = false;
+                for (coord j = 0; j < m; j++) {
+                    if (M[i][j/CH_SIZE] & (ull(1) << (CH_SIZE_1 - j % CH_SIZE))) {
+                        curr_Er += columns[j];
+                        if (columns[j] && (!is_set || columns[min_weight_col] > columns[j])) {
+                            min_weight_col = j;
+                            is_set = true;
+                        }
+                    }
+                }
+                // cout << curr_Er << "*" << min_weight_col << " \n";
+                if (curr_Er < least_Er) {
+                    least_d2 = min_weight_col;
+                    for (coord i = 0; i < n; i++) {
+                        if (!B[i]) continue;
+                        if (B[i][least_d2/CH_SIZE] & (ull(1) << (CH_SIZE_1 - least_d2 % CH_SIZE))) {
+                            least_d1 = i;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        // cout << endl;
+        delete [] columns;
+        return Element(least_d1, least_d2);
+    }
+};
+
+
 #endif

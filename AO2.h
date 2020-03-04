@@ -86,4 +86,45 @@ void AO2Zero(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, uin
     n_cov += coverages.size();
 }
 
+//! Implementation of AO2M algorithm with checking criterion on backtracing and no check_upper
+void AO2Mplus(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, uint64_t& n_steps) {
+    uint64_t len_last = 0;
+    CovCollector coverages;
+    AO2MplusTrajectory traj(n, m, R);
+    do {
+        len_last = traj.get_changes_size();
+        if (traj.complete_trajectory()) {
+            coverages.push_back(traj.get_coverage());
+            // std::cout << "COVERAGE" << '\n';
+            // for (auto q: traj.get_coverage()) std::cout << q << ' ';
+            // std::cout << '\n';
+        } else {
+            n_extra++;
+        }
+        n_steps += traj.get_changes_size() - len_last;
+
+    } while (traj.find_neighbour());
+    n_cov += coverages.size();
+}
+
+void AO2Mlightest(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, uint64_t& n_steps) {
+    uint64_t len_last = 0;
+    CovCollector coverages;
+    AO2MlightestTrajectory traj(n, m, R);
+    do {
+        len_last = traj.get_changes_size();
+        if (traj.complete_trajectory()) {
+            coverages.push_back(traj.get_coverage());
+            // std::cout << "COVERAGE" << '\n';
+            // for (auto q: traj.get_coverage()) std::cout << q << ' ';
+            // std::cout << '\n';
+        } else {
+            n_extra++;
+        }
+        n_steps += traj.get_changes_size() - len_last;
+
+    } while (traj.find_neighbour());
+    n_cov += coverages.size();
+}
+
 #endif
