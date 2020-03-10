@@ -102,8 +102,6 @@ void AO2Exp(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, uint
     n_cov += coverages.size();
 }
 
-
-
 void print_stats(std::string name, double elapsed, uint64_t & n_cov, uint64_t& n_extra, uint64_t& n_steps) {
     std::cout << name << ": ";
     std::cout << elapsed << " & ";
@@ -114,8 +112,8 @@ void print_stats(std::string name, double elapsed, uint64_t & n_cov, uint64_t& n
 
 
 int main(int argc, char *argv[]) {
-    coord HEIGHT = 20;
-    coord WIDTH = 50;
+    coord HEIGHT = 30;
+    coord WIDTH = 30;
     double SPARSITY = 0.5;
 
     double elapsed = 0;
@@ -127,7 +125,7 @@ int main(int argc, char *argv[]) {
     srand(time(NULL));
     int i = 0;
     while (true) {
-        if (i > 10) break;
+        if (i >= 1) break;
         cout << i++ << '\n';
         generate_matrix(HEIGHT, WIDTH, "matrix.txt", SPARSITY);
         ull** R = read_matrix("matrix.txt", HEIGHT, WIDTH);
@@ -137,26 +135,33 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
-        start = clock();
-        n_cov = n_extra = n_steps = 0;
-        AO2(HEIGHT, WIDTH, R, n_cov, n_extra, n_steps);
-        stop = clock();
-        elapsed = (double) (stop - start) / CLOCKS_PER_SEC;
-        print_stats("AO2  :", elapsed, n_cov, n_extra, n_steps);
+        // start = clock();
+        // n_cov = n_extra = n_steps = 0;
+        // AO2(HEIGHT, WIDTH, R, n_cov, n_extra, n_steps);
+        // stop = clock();
+        // elapsed = (double) (stop - start) / CLOCKS_PER_SEC;
+        // print_stats("AO2  ", elapsed, n_cov, n_extra, n_steps);
 
         start = clock();
         n_cov = n_extra = n_steps = 0;
         AO2Moptimized(HEIGHT, WIDTH, R, n_cov, n_extra, n_steps);
         stop = clock();
         elapsed = (double) (stop - start) / CLOCKS_PER_SEC;
-        print_stats("AO2M+  :", elapsed, n_cov, n_extra, n_steps);
+        print_stats("AO2M+", elapsed, n_cov, n_extra, n_steps);
 
         start = clock();
         n_cov = n_extra = n_steps = 0;
         AO2Best(HEIGHT, WIDTH, R, n_cov, n_extra, n_steps);
         stop = clock();
         elapsed = (double) (stop - start) / CLOCKS_PER_SEC;
-        print_stats("Best :", elapsed, n_cov, n_extra, n_steps);
+        print_stats("Best ", elapsed, n_cov, n_extra, n_steps);
+
+        start = clock();
+        n_cov = n_extra = n_steps = 0;
+        AO2Exp(HEIGHT, WIDTH, R, n_cov, n_extra, n_steps);
+        stop = clock();
+        elapsed = (double) (stop - start) / CLOCKS_PER_SEC;
+        print_stats("Exp  ", elapsed, n_cov, n_extra, n_steps);
 
         for (coord i = 0; i < HEIGHT; i++) {
             delete [] R[i];
