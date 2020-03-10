@@ -9,26 +9,12 @@
 
 #include "matrix_utils.h"
 
-typedef uint32_t ull; // typedef for chunks in which matrix is stored
-typedef uint32_t coord; // typedef for matrix shape and coordinates and shape-like values
-// typedef for status of row:
-// 0: not covered
-// 1: deleted as dominating
-// 2: covered, is not competing
-// 3: covered, is competing (all competing rows are covered by definition)
-typedef uint8_t st;
-
-typedef std::stack<ull**> BMatrixStack;
-typedef std::stack<st*> RowStatesStack;
+typedef ao2_stack<ull**> BMatrixStack;
+typedef ao2_stack<st*> RowStatesStack;
 typedef std::pair<coord, coord> Element;
 typedef std::vector<Element> QVector;
 typedef std::vector<std::vector<coord>> CovCollector;
-typedef std::stack<ull*> RowSetStack;
-
-enum {
-    CH_SIZE = sizeof(ull) * 8,
-    CH_SIZE_1 = sizeof(ull) * 8 - 1
-};
+typedef ao2_stack<ull*> RowSetStack;
 
 enum {
     ST_IS_COV = 1, // row is covered
@@ -264,16 +250,21 @@ public:
                 B[i][j] = M[i][j] = Matrix[i][j];
             }
         }
+        not_cov_rows = RowSetStack(n);
         ull* tmp = new ull[row_chunks];
         for (coord i = 0; i <  row_chunks; i++) {
             tmp[i] = ull(-1);
         }
         not_cov_rows.push(tmp);
+
+        deleted_by_domination = RowSetStack(n);
         tmp = new ull[row_chunks];
         for (coord i = 0; i <  row_chunks; i++) {
             tmp[i] = ull(0);
         }
         deleted_by_domination.push(tmp);
+
+        changes = BMatrixStack(m);
     }
 
     ~AO2Trajectory() {
@@ -843,9 +834,11 @@ public:
                 B[i][j] = M[i][j] = Matrix[i][j];
             }
         }
-
+        states = RowStatesStack(2*m);
         st* tmp = new st[n]();
         states.push(tmp);
+
+        changes = BMatrixStack(m);
     }
 
     ~AO2ZeroTrajectory() {
@@ -1380,9 +1373,11 @@ public:
             }
         }
 
+        states = RowStatesStack(2*m);
         st* tmp = new st[n]();
         states.push(tmp);
 
+        changes = BMatrixStack(m);
         latest_element = Element(-1, -1);
     }
 

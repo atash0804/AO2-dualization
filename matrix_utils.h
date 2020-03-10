@@ -9,12 +9,24 @@
 #include <cstring>
 #include <bitset>
 
-#include "AO2_trajectory.h"
-
 using namespace std;
 
 #ifndef DUALIZATION_CHUNK_SIZE
 #define DUALIZATION_CHUNK_SIZE
+
+typedef uint32_t ull; // typedef for chunks in which matrix is stored
+typedef uint32_t coord; // typedef for matrix shape and coordinates and shape-like values
+enum {
+    CH_SIZE = sizeof(ull) * 8,
+    CH_SIZE_1 = sizeof(ull) * 8 - 1
+};
+// typedef for status of row:
+// 0: not covered
+// 1: deleted as dominating
+// 2: covered, is not competing
+// 3: covered, is competing (all competing rows are covered by definition)
+typedef uint8_t st;
+
 enum {
     CHUNK_SIZE = sizeof(ull) * 8,
 };
@@ -149,5 +161,25 @@ uint64_t basic_dualization(coord n, coord m, ull** R) {
     }
     return count_cov;
 }
+
+template <class T> class ao2_stack {
+public:
+    uint32_t ptr;
+    T* data;
+
+    ao2_stack(coord size = 1): ptr(0) {data = new T[size];}
+
+    // ~ao2_stack() {delete [] data;}
+
+    T top() {return data[ptr];}
+
+    void push(T a) {ptr++; data[ptr] = a;}
+
+    void pop() {ptr--;}
+
+    bool empty() {return (ptr == 0);}
+
+    uint32_t size() {return ptr;}
+};
 
 #endif

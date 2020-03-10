@@ -112,9 +112,9 @@ void print_stats(std::string name, double elapsed, uint64_t & n_cov, uint64_t& n
 
 
 int main(int argc, char *argv[]) {
-    coord HEIGHT = 30;
-    coord WIDTH = 30;
-    double SPARSITY = 0.5;
+    coord HEIGHT = 50;
+    coord WIDTH = 50;
+    double SPARSITY = 0.9;
 
     double elapsed = 0;
     uint64_t n_cov = 0;
@@ -156,12 +156,12 @@ int main(int argc, char *argv[]) {
         elapsed = (double) (stop - start) / CLOCKS_PER_SEC;
         print_stats("Best ", elapsed, n_cov, n_extra, n_steps);
 
-        start = clock();
-        n_cov = n_extra = n_steps = 0;
-        AO2Exp(HEIGHT, WIDTH, R, n_cov, n_extra, n_steps);
-        stop = clock();
-        elapsed = (double) (stop - start) / CLOCKS_PER_SEC;
-        print_stats("Exp  ", elapsed, n_cov, n_extra, n_steps);
+        // start = clock();
+        // n_cov = n_extra = n_steps = 0;
+        // AO2Exp(HEIGHT, WIDTH, R, n_cov, n_extra, n_steps);
+        // stop = clock();
+        // elapsed = (double) (stop - start) / CLOCKS_PER_SEC;
+        // print_stats("Exp  ", elapsed, n_cov, n_extra, n_steps);
 
         for (coord i = 0; i < HEIGHT; i++) {
             delete [] R[i];
