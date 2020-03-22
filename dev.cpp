@@ -10,6 +10,8 @@
 #include "matrix_utils.h"
 #include "AO2.h"
 
+typedef ao2_stack<coord*> ColumnWeightStack;
+
 /************************************************************
 *   This file contains experimental implementation of AO2
 *   algorithm
@@ -37,6 +39,10 @@ protected:
     /*! Each state is represented as *st */
     RowStatesStack states;
 
+    //! Stack of column weights on each step
+    /*! Each element is row which should be covered and column weights */
+    ColumnWeightStack column_weights;
+
     //! Representation of set Q (elements that form the trajectory)
     /*! Vector of pairs (i_r, j_r) which form the Q set*/
     QVector Q;
@@ -59,8 +65,8 @@ protected:
         coord count;
         ull tmp;
         ull *H_B = new ull[col_chunks]();
-        ull *covered_by_one = new ull[col_chunks];
-        for (coord j = 0; j < col_chunks; j++) covered_by_one[j] = ull(-1);
+        // ull *covered_by_one = new ull[col_chunks];
+        // for (coord j = 0; j < col_chunks; j++) covered_by_one[j] = ull(-1);
         for (coord i = 0; i < n; i++) {
             if (!B[i]) continue;
             for (coord j = 0; j < col_chunks; j++) {
@@ -69,9 +75,9 @@ protected:
         }
         for (coord i = 0; i < n; i++) {
             if (!(states.top()[i] & ST_IS_COV)) {
-                for (coord j = 0; j < col_chunks; j++) {
-                    covered_by_one[j] &= M[i][j];
-                }
+                // for (coord j = 0; j < col_chunks; j++) {
+                //     covered_by_one[j] &= M[i][j];
+                // }
                 count = 0;
                 for (coord j = 0; j < col_chunks; j++) {
                     tmp = M[i][j] & H_B[j];
@@ -100,18 +106,18 @@ protected:
                 }
             }
         }
-        if ((latest_element.first != -1) && (covered_by_one[latest_element.second / CH_SIZE] & (ull(1) << (CH_SIZE_1 - latest_element.second % CH_SIZE)))) {
-            // set j acc to latest element
-            for (coord j = 0; j < col_chunks; j++) {
-                if (covered_by_one[j]) {
-                    for (coord i = 0; i < n; i++) {
-                        if (states.top()[i] == ST_COMP) {
-                            if (!(covered_by_one[j] & M[i][j])) return false;
-                        }
-                    }
-                }
-            }
-        }
+        // if ((latest_element.first != -1) && (covered_by_one[latest_element.second / CH_SIZE] & (ull(1) << (CH_SIZE_1 - latest_element.second % CH_SIZE)))) {
+        //     // set j acc to latest element
+        //     for (coord j = 0; j < col_chunks; j++) {
+        //         if (covered_by_one[j]) {
+        //             for (coord i = 0; i < n; i++) {
+        //                 if (states.top()[i] == ST_COMP) {
+        //                     if (!(covered_by_one[j] & M[i][j])) return false;
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
 
         return true;
     }
@@ -173,16 +179,43 @@ protected:
 
     //! Find non-zero element of B with the least index
     virtual Element find_the_least() {
-        if (latest_element.first != coord(-1)) {
-            for (coord i = latest_element.first + 1; i < n; i++) {
-                if (!B[i]) continue;
-                if (B[i][latest_element.second / CH_SIZE] & (ull(1) << (CH_SIZE_1 - latest_element.second % CH_SIZE))) {
-                    latest_element = Element(-1, latest_element.second);
-                    return Element(i, latest_element.second);
+        // cout << latest_element.first << '@' << latest_element.second << '\n' << flush;
+        // cout << column_weights.size() << '\n' << flush;
+        if (latest_element.first != coord(-1) && column_weights.size() > 1) {
+            //
+            // cout << "CACHED FIND LEAST:\n";
+            // print_B();
+            // for (coord j = 0; j < m; j++) cout << column_weights.top()[j] << ' ';
+            // cout << endl << flush;
+            latest_element = Element(-1, latest_element.second);
+            // if latest column is not empty
+            if (column_weights.top()[latest_element.second]) {
+                for (coord i = latest_element.first + 1; i < n; i++) {
+                    if (!B[i]) continue;
+                    if (B[i][latest_element.second / CH_SIZE] & (ull(1) << (CH_SIZE_1 - latest_element.second % CH_SIZE))) {
+                        column_weights.top()[latest_element.second]--;
+                        return Element(i, latest_element.second);
+                    }
+                }
+            } else {
+                coord best_col = -1;
+                bool is_set = false;
+                for (coord j = 0; j < m; j++) {
+                    if (column_weights.top()[j] && (!is_set || (column_weights.top()[best_col] > column_weights.top()[j]))) {
+                        best_col = j;
+                        is_set = true;
+                    }
+                }
+                for (coord i = 0; i < n; i++) {
+                    if (!B[i]) continue;
+                    if (B[i][best_col / CH_SIZE] & (ull(1) << (CH_SIZE_1 - best_col % CH_SIZE))) {
+                        column_weights.top()[best_col]--;
+                        return Element(i, best_col);
+                    }
                 }
             }
-            latest_element = Element(-1, latest_element.second);
         }
+        // if (column_weights.size() == 1) cout << "FINDING MANUALLY\n";
         coord least_d1 = -1;
         coord least_d2 = -1;
         coord least_Er = n*m+1, curr_Er;
@@ -196,6 +229,10 @@ protected:
                 if (B[i][j/CH_SIZE] & (ull(1) << (CH_SIZE_1 - j % CH_SIZE))) columns[j]++;
             }
         }
+        // cout << "CHECK COLS:\n";
+        // print_B();
+        // for (coord j = 0; j < m; j++) cout << columns[j] << ' ';
+        // cout << endl << flush;
 
         for (coord i = 0; i < n; i++) {
             // if row is not covered or is competing
@@ -225,8 +262,13 @@ protected:
                 }
             }
         }
-        // cout << endl;
-        delete [] columns;
+        for (coord j = 0; j < m; j++) {
+            if (!(M[least_d1][j/CH_SIZE] & (ull(1) << (CH_SIZE_1 - j % CH_SIZE)))) {
+                columns[j] = 0;
+            }
+        }
+        // cout << "PUSH\n";
+        column_weights.push(columns);
         return Element(least_d1, least_d2);
     }
 
@@ -296,6 +338,11 @@ protected:
         delete [] states.top();
         states.pop();
 
+        delete [] column_weights.top();
+        // cout << "POP\n";
+        column_weights.pop();
+        // cout << "SIZES" << states.size() << ' ' << column_weights.size() << '\n' << flush;
+
         for (coord p = 0; p < n; p++) {
             delete [] B[p];
         }
@@ -333,6 +380,9 @@ public:
         st* tmp = new st[n]();
         states.push(tmp);
 
+        column_weights = ColumnWeightStack(m);
+        column_weights.push(NULL);
+
         changes = BMatrixStack(m);
         latest_element = Element(-1, -1);
     }
@@ -354,6 +404,10 @@ public:
 
         for (; !states.empty(); states.pop()) {
             delete [] states.top();
+        }
+
+        for (; !column_weights.empty(); column_weights.pop()) {
+            delete [] column_weights.top();
         }
     }
 
@@ -378,7 +432,9 @@ public:
         while (!check_empty()) {
             // cout << "INITIAL\n";
             // print_B();
-            if (!check_covers_comp_rows()) return false;
+            if (!check_covers_comp_rows()) {
+                return false;
+            }
             if (eliminate_dominating_rows() && !check_covers_comp_rows()) {
                 return false;
             }
@@ -479,8 +535,8 @@ int main(int argc, char *argv[]) {
     double ROUNDS = 1;
     clock_t start, stop;
     srand(time(NULL));
-    for (coord HEIGHT: std::vector<int>{40}) {
-        for (coord WIDTH: std::vector<int>{40}) {
+    for (coord HEIGHT: std::vector<int>{50}) {
+        for (coord WIDTH: std::vector<int>{50}) {
             // double elapsed1 = 0, elapsed2 = 0, elapsed3 = 0, elapsed4 = 0;
             // uint64_t n_cov1 = 0, n_cov2 = 0, n_cov3 = 0, n_cov4 = 0;
             // uint64_t n_extra1 = 0, n_extra2 = 0, n_extra3 = 0, n_extra4 = 0;
