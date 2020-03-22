@@ -88,6 +88,49 @@ protected:
         return true;
     }
 
+    void eliminate_dominating_rows(ull *H_B) {
+        ull **updated_B = new ull*[n];
+
+        bool i1_dom_i2, i2_dom_i1;
+        for (coord i1 = 0; i1 < n; i1++) {
+            if (!B[i1]) {
+                updated_B[i1] = NULL;
+                continue;
+            } else {
+                updated_B[i1] = new ull[col_chunks]();
+                for (coord j = 0; j < col_chunks; j++) updated_B[i1][j] = B[i1][j];
+            }
+        }
+
+        for (coord i1 = 0; i1 < n; i1++) {
+            if (!B[i1]) continue;
+            for (coord i2 = i1+1; i2 < n; i2++) {
+                if (!B[i2]) continue;
+                i1_dom_i2 = i2_dom_i1 = true;
+                for (coord j = 0; j < col_chunks; j++) {
+                    if ((M[i2][j] & M[i1][j] & H_B[j]) != (M[i1][j] & H_B[j])) i2_dom_i1 = false;
+                    if ((M[i1][j] & M[i2][j] & H_B[j]) != (M[i2][j] & H_B[j])) i1_dom_i2 = false;
+                    if (!(i2_dom_i1 || i1_dom_i2)) break;
+                }
+                if (i2_dom_i1) {
+                    delete [] updated_B[i2];
+                    states.top()[i2] = (states.top()[i2] & 3) | ST_IS_DOM;
+                    updated_B[i2] = NULL;
+                } else {
+                    if (i1_dom_i2) {
+                        delete [] updated_B[i1];
+                        states.top()[i1] = (states.top()[i1] & 3) | ST_IS_DOM;
+                        updated_B[i1] = NULL;
+                    }
+                }
+            }
+        }
+        for (coord i = 0; i < n; i++) delete [] B[i];
+        delete [] B;
+        B = updated_B;
+        return;
+    }
+
     bool check_domination(coord least_d1, coord least_d2) {
         ull *H_B = new ull[col_chunks]();
         for (coord i = 0; i < n; i++) {
@@ -106,10 +149,8 @@ protected:
                 if (!d1_dom_i) break;
             }
             if (d1_dom_i) {
-                // cout << "ROW " << least_d1 << " DOMS " << i << '\n';
-                states.top()[least_d1] = (states.top()[least_d1] & 3) | ST_IS_DOM;
-                delete [] B[least_d1];
-                B[least_d1] = NULL;
+                eliminate_dominating_rows(H_B);
+                delete [] H_B;
                 return true;
             }
         }
@@ -119,12 +160,12 @@ protected:
     }
 
     //! Find non-zero element of B with the least index
-    virtual Element find_the_least() {
+    virtual Element find_the_least(bool no_dom) {
         if (latest_element.first != coord(-1)) {
             for (coord i = latest_element.first + 1; i < n; i++) {
                 if (!B[i]) continue;
                 if (B[i][latest_element.second / CH_SIZE] & (ull(1) << (CH_SIZE_1 - latest_element.second % CH_SIZE))) {
-                    if (!check_domination(i, latest_element.second)) {
+                    if (no_dom || !check_domination(i, latest_element.second)) {
                         if (check_covers_comp_rows()) {
                             latest_element = Element(-1, latest_element.second);
                             return Element(i, latest_element.second);
@@ -132,7 +173,7 @@ protected:
                             return Element(-1, -1);
                         }
                     } else {
-                        return find_the_least();
+                        return find_the_least(true);
                     }
                 }
             }
@@ -182,14 +223,14 @@ protected:
         }
         // cout << endl;
         delete [] columns;
-        if (!check_domination(least_d1, least_d2)) {
+        if (no_dom || !check_domination(least_d1, least_d2)) {
             if (check_covers_comp_rows()) {
                 return Element(least_d1, least_d2);
             } else {
                 return Element(-1, -1);
             }
         } else {
-            return find_the_least();
+            return find_the_least(true);
         }
     }
 
@@ -289,13 +330,11 @@ public:
         row_chunks = (n-1) / CH_SIZE + 1;
         B = new ull*[n+1];
         M = new ull*[n];
-        B[n] = new ull[col_chunks];
         for (coord i = 0; i < n; i++) {
             B[i] = new ull[col_chunks];
             M[i] = new ull[col_chunks];
             for (coord j = 0; j < col_chunks; j++) {
                 B[i][j] = M[i][j] = Matrix[i][j];
-                B[n][j] |= B[i][j];
             }
         }
 
@@ -312,7 +351,6 @@ public:
             if (B[i]) delete [] B[i];
             if (M[i]) delete [] M[i];
         }
-        delete B[n];
         delete [] B;
         delete [] M;
 
@@ -350,7 +388,7 @@ public:
             if (!check_covers_comp_rows()) return false;
             // cout << "INITIAL\n";
             // print_B();
-            Element candidate = find_the_least();
+            Element candidate = find_the_least(false);
             // cout << "AFTER FIND THE LEAST\n";
             // print_B();
             if (candidate.first == -1) {
