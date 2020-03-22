@@ -59,6 +59,8 @@ protected:
         coord count;
         ull tmp;
         ull *H_B = new ull[col_chunks]();
+        ull *covered_by_one = new ull[col_chunks];
+        for (coord j = 0; j < col_chunks; j++) covered_by_one[j] = ull(-1);
         for (coord i = 0; i < n; i++) {
             if (!B[i]) continue;
             for (coord j = 0; j < col_chunks; j++) {
@@ -67,6 +69,9 @@ protected:
         }
         for (coord i = 0; i < n; i++) {
             if (!(states.top()[i] & ST_IS_COV)) {
+                for (coord j = 0; j < col_chunks; j++) {
+                    covered_by_one[j] &= M[i][j];
+                }
                 count = 0;
                 for (coord j = 0; j < col_chunks; j++) {
                     tmp = M[i][j] & H_B[j];
@@ -95,6 +100,19 @@ protected:
                 }
             }
         }
+        if ((latest_element.first != -1) && (covered_by_one[latest_element.second / CH_SIZE] & (ull(1) << (CH_SIZE_1 - latest_element.second % CH_SIZE)))) {
+            // set j acc to latest element
+            for (coord j = 0; j < col_chunks; j++) {
+                if (covered_by_one[j]) {
+                    for (coord i = 0; i < n; i++) {
+                        if (states.top()[i] == ST_COMP) {
+                            if (!(covered_by_one[j] & M[i][j])) return false;
+                        }
+                    }
+                }
+            }
+        }
+
         return true;
     }
 
@@ -103,8 +121,6 @@ protected:
     bool eliminate_dominating_rows() {
         bool has_changed = false;
         ull **updated_B = new ull*[n];
-        st* updated_state = new st[n];
-        for (coord i = 0; i < n; i++) updated_state[i] = states.top()[i];
         bool i1_dom_i2, i2_dom_i1;
         for (coord i1 = 0; i1 < n; i1++) {
             if (!B[i1]) {
@@ -136,13 +152,13 @@ protected:
                 if (i2_dom_i1) {
                     has_changed = true;
                     delete [] updated_B[i2];
-                    updated_state[i2] = (updated_state[i2] & 3) | ST_IS_DOM;
+                    states.top()[i2] = (states.top()[i2] & 3) | ST_IS_DOM;
                     updated_B[i2] = NULL;
                 } else {
                     if (i1_dom_i2) {
                         has_changed = true;
                         delete [] updated_B[i1];
-                        updated_state[i1] = (updated_state[i1] & 3) | ST_IS_DOM;
+                        states.top()[i1] = (states.top()[i1] & 3) | ST_IS_DOM;
                         updated_B[i1] = NULL;
                     }
                 }
@@ -151,7 +167,6 @@ protected:
         delete [] H_B;
         for (coord i = 0; i < n; i++) delete [] B[i];
         delete [] B;
-        states.push(updated_state);
         B = updated_B;
         return has_changed;
     }
@@ -280,11 +295,6 @@ protected:
 
         delete [] states.top();
         states.pop();
-        st* B_state = states.top();
-        states.pop();
-        delete [] states.top();
-        states.pop();
-        states.push(B_state);
 
         for (coord p = 0; p < n; p++) {
             delete [] B[p];
@@ -370,8 +380,6 @@ public:
             // print_B();
             if (!check_covers_comp_rows()) return false;
             if (eliminate_dominating_rows() && !check_covers_comp_rows()) {
-                delete [] states.top();
-                states.pop();
                 return false;
             }
             // cout << "AFTER DOM ROWS\n";
@@ -379,6 +387,7 @@ public:
             Element candidate = find_the_least();
             Q.push_back(candidate);
             if (!eliminate_incompatible(candidate)) {
+                // cout << "WOW\n";
                 return false;
             }
             // cout << "AFTER ELIM INCOMPAT\n";
@@ -470,13 +479,17 @@ int main(int argc, char *argv[]) {
     double ROUNDS = 1;
     clock_t start, stop;
     srand(time(NULL));
-    for (coord HEIGHT: std::vector<int>{30}) {
-        for (coord WIDTH: std::vector<int>{30}) {
-            double elapsed1 = 0, elapsed2 = 0, elapsed3 = 0, elapsed4 = 0;
-            uint64_t n_cov1 = 0, n_cov2 = 0, n_cov3 = 0, n_cov4 = 0;
-            uint64_t n_extra1 = 0, n_extra2 = 0, n_extra3 = 0, n_extra4 = 0;
-            uint64_t n_steps1 = 0, n_steps2 = 0, n_steps3 = 0, n_steps4 = 0;
+    for (coord HEIGHT: std::vector<int>{40}) {
+        for (coord WIDTH: std::vector<int>{40}) {
+            // double elapsed1 = 0, elapsed2 = 0, elapsed3 = 0, elapsed4 = 0;
+            // uint64_t n_cov1 = 0, n_cov2 = 0, n_cov3 = 0, n_cov4 = 0;
+            // uint64_t n_extra1 = 0, n_extra2 = 0, n_extra3 = 0, n_extra4 = 0;
+            // uint64_t n_steps1 = 0, n_steps2 = 0, n_steps3 = 0, n_steps4 = 0;
             for (int i = 0; i < ROUNDS; i++) {
+                double elapsed1 = 0, elapsed2 = 0, elapsed3 = 0, elapsed4 = 0;
+                uint64_t n_cov1 = 0, n_cov2 = 0, n_cov3 = 0, n_cov4 = 0;
+                uint64_t n_extra1 = 0, n_extra2 = 0, n_extra3 = 0, n_extra4 = 0;
+                uint64_t n_steps1 = 0, n_steps2 = 0, n_steps3 = 0, n_steps4 = 0;
                 generate_matrix(HEIGHT, WIDTH, "matrix.txt", SPARSITY);
                 ull** R = read_matrix("matrix.txt", HEIGHT, WIDTH);
 
@@ -506,15 +519,18 @@ int main(int argc, char *argv[]) {
                 stop = clock();
                 elapsed4 += (double) (stop - start) / CLOCKS_PER_SEC;
 
+                // if (n_cov4 != n_cov3) return 0;
+                print_stats("AO2 ", elapsed1, n_cov1, n_extra1, n_steps1);
+                print_stats("AO2M", elapsed2, n_cov2, n_extra2, n_steps2);
+                print_stats("AO2Z", elapsed3, n_cov3, n_extra3, n_steps3);
+                print_stats("Cr 5", elapsed4, n_cov4, n_extra4, n_steps4);
+
                 for (coord i = 0; i < HEIGHT; i++) {
                     delete [] R[i];
                 }
                 delete [] R;
             }
-            print_stats("AO2 ", elapsed1, n_cov1, n_extra1, n_steps1);
-            print_stats("AO2M", elapsed2, n_cov2, n_extra2, n_steps2);
-            print_stats("AO2Z", elapsed3, n_cov3, n_extra3, n_steps3);
-            print_stats("Cr 5", elapsed4, n_cov4, n_extra4, n_steps4);
+
             // std::cout << HEIGHT << " \\times " << WIDTH << " & ";
             // std::cout << elapsed1 / ROUNDS << " & ";
             // std::cout << elapsed2 / ROUNDS << " & ";
