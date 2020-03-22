@@ -14,14 +14,7 @@
 *   This file contains experimental implementation of AO2
 *   algorithm
 ************************************************************/
-//! Class to represent changing trajectories
-/*!
-  This class implements the trajectory - sequence of changing pairs (B, Q),
-  which ends with a candidate for shortest coverage and all operations on
-  trajectories which are needed for AO2.
-
-*/
-class AO2TrajectoryNoDom {
+class AO2TrajectoryCrit5 {
 protected:
     coord n; //!< First dimension of matrix
     coord m; //!< Second dimension of matrix
@@ -63,34 +56,55 @@ protected:
     }
 
     virtual bool check_covers_comp_rows() {
-        bool is_empty;
+        coord count;
+        ull tmp;
+        ull *H_B = new ull[col_chunks]();
         for (coord i = 0; i < n; i++) {
-            // if row is not covered or is competing
-            if ((!(states.top()[i] & ST_IS_COV)) || (states.top()[i] == ST_COMP)) {
-                // std::cout << "1st BR\n" << std::flush;
-                is_empty = true;
-                for (coord i1 = 0; i1 < n; i1++) {
-                    if (!B[i1]) continue;
-                    for (coord j = 0; j < col_chunks; j++) {
-                        if (B[i1][j] & M[i][j]) {
-                            is_empty = false;
-                            break;
-                        }
+            if (!B[i]) continue;
+            for (coord j = 0; j < col_chunks; j++) {
+                H_B[j] |= B[i][j];
+            }
+        }
+        for (coord i = 0; i < n; i++) {
+            if (!(states.top()[i] & ST_IS_COV)) {
+                count = 0;
+                for (coord j = 0; j < col_chunks; j++) {
+                    tmp = M[i][j] & H_B[j];
+                    while (tmp) {
+                        if (count) break;
+                        tmp &= (tmp - 1);
+                        count++;
                     }
-                    if (!is_empty) break;
+                    if (count) break;
                 }
-                if (is_empty) {
-                    // std::cout << "OUT COMPROWS FAIL1\n" << std::flush;
-                    return false;
+                if (count < 1) return false;
+            } else {
+                // if row is competing
+                if (states.top()[i] == ST_COMP) {
+                    count = 0;
+                    for (coord j = 0; j < col_chunks; j++) {
+                        tmp = M[i][j] & H_B[j];
+                        while (tmp) {
+                            if (count) break;
+                            tmp &= (tmp - 1);
+                            count++;
+                        }
+                        if (count) break;
+                    }
+                    if (count < 1) return false;
                 }
             }
         }
         return true;
     }
 
-    void eliminate_dominating_rows(ull *H_B) {
+    //! Create delta_star set
+    /*! Includes 1s from dominating rows which correspond to 0s in dominated row.*/
+    bool eliminate_dominating_rows() {
+        bool has_changed = false;
         ull **updated_B = new ull*[n];
-
+        st* updated_state = new st[n];
+        for (coord i = 0; i < n; i++) updated_state[i] = states.top()[i];
         bool i1_dom_i2, i2_dom_i1;
         for (coord i1 = 0; i1 < n; i1++) {
             if (!B[i1]) {
@@ -99,6 +113,13 @@ protected:
             } else {
                 updated_B[i1] = new ull[col_chunks]();
                 for (coord j = 0; j < col_chunks; j++) updated_B[i1][j] = B[i1][j];
+            }
+        }
+        ull *H_B = new ull[col_chunks]();
+        for (coord i = 0; i < n; i++) {
+            if (!B[i]) continue;
+            for (coord j = 0; j < col_chunks; j++) {
+                H_B[j] |= B[i][j];
             }
         }
 
@@ -113,68 +134,36 @@ protected:
                     if (!(i2_dom_i1 || i1_dom_i2)) break;
                 }
                 if (i2_dom_i1) {
+                    has_changed = true;
                     delete [] updated_B[i2];
-                    states.top()[i2] = (states.top()[i2] & 3) | ST_IS_DOM;
+                    updated_state[i2] = (updated_state[i2] & 3) | ST_IS_DOM;
                     updated_B[i2] = NULL;
                 } else {
                     if (i1_dom_i2) {
+                        has_changed = true;
                         delete [] updated_B[i1];
-                        states.top()[i1] = (states.top()[i1] & 3) | ST_IS_DOM;
+                        updated_state[i1] = (updated_state[i1] & 3) | ST_IS_DOM;
                         updated_B[i1] = NULL;
                     }
                 }
             }
         }
+        delete [] H_B;
         for (coord i = 0; i < n; i++) delete [] B[i];
         delete [] B;
+        states.push(updated_state);
         B = updated_B;
-        return;
-    }
-
-    bool check_domination(coord least_d1, coord least_d2) {
-        ull *H_B = new ull[col_chunks]();
-        for (coord i = 0; i < n; i++) {
-            if (!B[i]) continue;
-            for (coord j = 0; j < col_chunks; j++) {
-                H_B[j] |= B[i][j];
-            }
-        }
-
-        bool d1_dom_i;
-        for (coord i = 0; i < n; i++) {
-            if (!B[i] || (i == least_d1)) continue;
-            d1_dom_i = true;
-            for (coord j = 0; j < col_chunks; j++) {
-                if ((M[least_d1][j] & M[i][j] & H_B[j]) != (M[i][j] & H_B[j])) d1_dom_i = false;
-                if (!d1_dom_i) break;
-            }
-            if (d1_dom_i) {
-                eliminate_dominating_rows(H_B);
-                delete [] H_B;
-                return true;
-            }
-        }
-
-        delete [] H_B;
-        return false;
+        return has_changed;
     }
 
     //! Find non-zero element of B with the least index
-    virtual Element find_the_least(bool no_dom) {
+    virtual Element find_the_least() {
         if (latest_element.first != coord(-1)) {
             for (coord i = latest_element.first + 1; i < n; i++) {
                 if (!B[i]) continue;
                 if (B[i][latest_element.second / CH_SIZE] & (ull(1) << (CH_SIZE_1 - latest_element.second % CH_SIZE))) {
-                    if (no_dom || !check_domination(i, latest_element.second)) {
-                        if (check_covers_comp_rows()) {
-                            latest_element = Element(-1, latest_element.second);
-                            return Element(i, latest_element.second);
-                        } else {
-                            return Element(-1, -1);
-                        }
-                    } else {
-                        return find_the_least(true);
-                    }
+                    latest_element = Element(-1, latest_element.second);
+                    return Element(i, latest_element.second);
                 }
             }
             latest_element = Element(-1, latest_element.second);
@@ -208,7 +197,7 @@ protected:
                     }
                 }
                 // cout << curr_Er << "*" << min_weight_col << " \n";
-                if (curr_Er && curr_Er < least_Er) {
+                if (curr_Er < least_Er) {
                     least_Er = curr_Er;
                     least_d2 = best_col;
                     for (coord i1 = 0; i1 < n; i1++) {
@@ -223,15 +212,7 @@ protected:
         }
         // cout << endl;
         delete [] columns;
-        if (no_dom || !check_domination(least_d1, least_d2)) {
-            if (check_covers_comp_rows()) {
-                return Element(least_d1, least_d2);
-            } else {
-                return Element(-1, -1);
-            }
-        } else {
-            return find_the_least(true);
-        }
+        return Element(least_d1, least_d2);
     }
 
     //! Create delta_ij set
@@ -299,11 +280,11 @@ protected:
 
         delete [] states.top();
         states.pop();
-        // st* B_state = states.top();
-        // states.pop();
-        // delete [] states.top();
-        // states.pop();
-        // states.push(B_state);
+        st* B_state = states.top();
+        states.pop();
+        delete [] states.top();
+        states.pop();
+        states.push(B_state);
 
         for (coord p = 0; p < n; p++) {
             delete [] B[p];
@@ -323,12 +304,12 @@ protected:
         return;
     }
 public:
-    AO2TrajectoryNoDom(coord d1, coord d2, ull** Matrix) {
+    AO2TrajectoryCrit5(coord d1, coord d2, ull** Matrix) {
         n = d1;
         m = d2;
         col_chunks = (m-1) / CH_SIZE + 1;
         row_chunks = (n-1) / CH_SIZE + 1;
-        B = new ull*[n+1];
+        B = new ull*[n];
         M = new ull*[n];
         for (coord i = 0; i < n; i++) {
             B[i] = new ull[col_chunks];
@@ -346,7 +327,7 @@ public:
         latest_element = Element(-1, -1);
     }
 
-    ~AO2TrajectoryNoDom() {
+    ~AO2TrajectoryCrit5() {
         for (coord i = 0; i < n; i++) {
             if (B[i]) delete [] B[i];
             if (M[i]) delete [] M[i];
@@ -385,15 +366,17 @@ public:
     is therefore complete. */
     virtual bool complete_trajectory() {
         while (!check_empty()) {
-            if (!check_covers_comp_rows()) return false;
             // cout << "INITIAL\n";
             // print_B();
-            Element candidate = find_the_least(false);
-            // cout << "AFTER FIND THE LEAST\n";
-            // print_B();
-            if (candidate.first == -1) {
+            if (!check_covers_comp_rows()) return false;
+            if (eliminate_dominating_rows() && !check_covers_comp_rows()) {
+                delete [] states.top();
+                states.pop();
                 return false;
             }
+            // cout << "AFTER DOM ROWS\n";
+            // print_B();
+            Element candidate = find_the_least();
             Q.push_back(candidate);
             if (!eliminate_incompatible(candidate)) {
                 return false;
@@ -454,10 +437,10 @@ public:
     }
 };
 
-void AO2NoDom(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, uint64_t& n_steps) {
+void AO2Crit5(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, uint64_t& n_steps) {
     uint64_t len_last = 0;
     CovCollector coverages;
-    AO2TrajectoryNoDom traj(n, m, R);
+    AO2TrajectoryCrit5 traj(n, m, R);
     do {
         len_last = traj.get_changes_size();
         if (traj.complete_trajectory()) {
@@ -519,7 +502,7 @@ int main(int argc, char *argv[]) {
                 elapsed3 += (double) (stop - start) / CLOCKS_PER_SEC;
 
                 start = clock();
-                AO2NoDom(HEIGHT, WIDTH, R, n_cov4, n_extra4, n_steps4);
+                AO2Crit5(HEIGHT, WIDTH, R, n_cov4, n_extra4, n_steps4);
                 stop = clock();
                 elapsed4 += (double) (stop - start) / CLOCKS_PER_SEC;
 
@@ -531,7 +514,7 @@ int main(int argc, char *argv[]) {
             print_stats("AO2 ", elapsed1, n_cov1, n_extra1, n_steps1);
             print_stats("AO2M", elapsed2, n_cov2, n_extra2, n_steps2);
             print_stats("AO2Z", elapsed3, n_cov3, n_extra3, n_steps3);
-            print_stats("AO2N", elapsed4, n_cov4, n_extra4, n_steps4);
+            print_stats("Cr 5", elapsed4, n_cov4, n_extra4, n_steps4);
             // std::cout << HEIGHT << " \\times " << WIDTH << " & ";
             // std::cout << elapsed1 / ROUNDS << " & ";
             // std::cout << elapsed2 / ROUNDS << " & ";
