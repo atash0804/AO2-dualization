@@ -109,6 +109,7 @@ protected:
                     for (coord j = 0; j < col_chunks; j++) {
                         tmp |= covered_by_one[j] & M[i][j];
                     }
+                    // if (!tmp) cout << "WOW I SHOULD NOT BE HERE\n";
                     if (!tmp) return false;
                 }
             }
@@ -192,10 +193,36 @@ protected:
         coord best_col = -1;
         bool is_set;
 
+        coord n_uncov = 0;
         for (coord i = 0; i < n; i++) {
+            if (!(states.top()[i] & ST_IS_COV)) n_uncov++;
             if (!B[i]) continue;
             for (coord j = 0; j < m; j++) {
                 if (B[i][j/CH_SIZE] & (ull(1) << (CH_SIZE_1 - j % CH_SIZE))) columns[j]++;
+            }
+        }
+
+        ull* mask = new ull[col_chunks]();
+        bool covers_all_comp;
+        for (coord j = 0; j < m; j++) {
+            if (columns[j] == n_uncov) {
+                covers_all_comp = true;
+                for (coord i = 0; i < n; i++) {
+                    if ((states.top()[i] & ST_IS_COMP) && (!(M[i][j/CH_SIZE] & (ull(1) << (CH_SIZE_1 - j % CH_SIZE))))) {
+                        covers_all_comp = false;
+                        break;
+                    }
+                }
+                if (!covers_all_comp) {
+                    mask[j/CH_SIZE] |= (ull(1) << (CH_SIZE_1 - j % CH_SIZE));
+                    columns[j] = 0;
+                }
+            }
+        }
+        for (coord i = 0; i < n; i++) {
+            if (!B[i]) continue;
+            for (coord j = 0; j < col_chunks; j++) {
+                B[i][j] &= (~mask[j]);
             }
         }
 
@@ -213,7 +240,7 @@ protected:
                         }
                     }
                 }
-                // cout << curr_Er << "*" << min_weight_col << " \n";
+                if (!curr_Er) return Element(-1, -1);
                 if (curr_Er < least_Er) {
                     least_Er = curr_Er;
                     least_d2 = best_col;
@@ -229,6 +256,7 @@ protected:
         }
         // cout << endl;
         delete [] columns;
+        // cout << least_d1 << ' ' << least_d2 << endl << flush;
         return Element(least_d1, least_d2);
     }
 
@@ -387,6 +415,9 @@ public:
             // cout << "AFTER DOM ROWS\n";
             // print_B();
             Element candidate = find_the_least();
+            if (candidate.first == -1) {
+                return false;
+            }
             Q.push_back(candidate);
             if (!eliminate_incompatible(candidate)) {
                 // cout << "WOW\n";
@@ -481,8 +512,8 @@ int main(int argc, char *argv[]) {
     double ROUNDS = 1;
     clock_t start, stop;
     srand(time(NULL));
-    for (coord HEIGHT: std::vector<int>{33}) {
-        for (coord WIDTH: std::vector<int>{33}) {
+    for (coord HEIGHT: std::vector<int>{40}) {
+        for (coord WIDTH: std::vector<int>{40}) {
             // double elapsed1 = 0, elapsed2 = 0, elapsed3 = 0, elapsed4 = 0;
             // uint64_t n_cov1 = 0, n_cov2 = 0, n_cov3 = 0, n_cov4 = 0;
             // uint64_t n_extra1 = 0, n_extra2 = 0, n_extra3 = 0, n_extra4 = 0;
@@ -492,7 +523,7 @@ int main(int argc, char *argv[]) {
                 uint64_t n_cov1 = 0, n_cov2 = 0, n_cov3 = 0, n_cov4 = 0;
                 uint64_t n_extra1 = 0, n_extra2 = 0, n_extra3 = 0, n_extra4 = 0;
                 uint64_t n_steps1 = 0, n_steps2 = 0, n_steps3 = 0, n_steps4 = 0;
-                generate_matrix(HEIGHT, WIDTH, "matrix.txt", SPARSITY);
+                // generate_matrix(HEIGHT, WIDTH, "matrix.txt", SPARSITY);
                 ull** R = read_matrix("matrix.txt", HEIGHT, WIDTH);
 
                 if (has_zero_rows(R, HEIGHT, WIDTH)) {
