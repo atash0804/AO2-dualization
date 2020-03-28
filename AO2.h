@@ -14,7 +14,8 @@ void AO2(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, uint64_
         traj.complete_trajectory();
         n_steps += traj.get_changes_size() - len_last;
         if (traj.check_upper()) {
-            coverages.push_back(traj.get_coverage());
+            n_cov++;
+            // coverages.push_back(traj.get_coverage());
             // std::cout << "COVERAGE" << '\n';
             // for (auto q: traj.get_coverage()) std::cout << q << ' ';
             // std::cout << '\n';
@@ -22,7 +23,7 @@ void AO2(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, uint64_
             n_extra++;
         };
     } while (traj.find_neighbour());
-    n_cov += coverages.size();
+    // n_cov += coverages.size();
 }
 
 //! Implementation of AO2 algorithm which deletes similar cols
@@ -35,7 +36,7 @@ void AO2_delete_similar_cols (coord n, coord m, ull** R, uint64_t & n_cov, uint6
         traj.complete_trajectory();
         n_steps += traj.get_changes_size() - len_last;
         if (traj.check_upper()) {
-            coverages.push_back(traj.get_coverage());
+            // coverages.push_back(traj.get_coverage());
             n_cov += traj.get_n_coverages();
         } else {
             n_extra++;
@@ -53,7 +54,8 @@ void AO2_stop_not_upper(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n
         traj.complete_trajectory();
         n_steps += traj.get_changes_size() - len_last;
         if (traj.check_upper()) {
-            coverages.push_back(traj.get_coverage());
+            n_cov++;
+            // coverages.push_back(traj.get_coverage());
             // std::cout << "COVERAGE" << '\n';
             // for (auto q: traj.get_coverage()) std::cout << q << ' ';
             // std::cout << '\n';
@@ -61,7 +63,7 @@ void AO2_stop_not_upper(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n
             n_extra++;
         };
     } while (traj.find_neighbour());
-    n_cov += coverages.size();
+    // n_cov += coverages.size();
 }
 
 
@@ -73,7 +75,8 @@ void AO2Zero(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, uin
     do {
         len_last = traj.get_changes_size();
         if (traj.complete_trajectory()) {
-            coverages.push_back(traj.get_coverage());
+            n_cov++;
+            // coverages.push_back(traj.get_coverage());
             // std::cout << "COVERAGE" << '\n';
             // for (auto q: traj.get_coverage()) std::cout << q << ' ';
             // std::cout << '\n';
@@ -83,7 +86,7 @@ void AO2Zero(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, uin
         n_steps += traj.get_changes_size() - len_last;
 
     } while (traj.find_neighbour());
-    n_cov += coverages.size();
+    // n_cov += coverages.size();
 }
 
 //! Implementation of AO2M algorithm with checking criterion on backtracing and no check_upper
@@ -94,7 +97,8 @@ void AO2Mplus(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, ui
     do {
         len_last = traj.get_changes_size();
         if (traj.complete_trajectory()) {
-            coverages.push_back(traj.get_coverage());
+            n_cov++;
+            // coverages.push_back(traj.get_coverage());
             // std::cout << "COVERAGE" << '\n';
             // for (auto q: traj.get_coverage()) std::cout << q << ' ';
             // std::cout << '\n';
@@ -104,7 +108,7 @@ void AO2Mplus(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, ui
         n_steps += traj.get_changes_size() - len_last;
 
     } while (traj.find_neighbour());
-    n_cov += coverages.size();
+    // n_cov += coverages.size();
 }
 
 void AO2Mlightest(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, uint64_t& n_steps) {
@@ -114,7 +118,8 @@ void AO2Mlightest(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra
     do {
         len_last = traj.get_changes_size();
         if (traj.complete_trajectory()) {
-            coverages.push_back(traj.get_coverage());
+            n_cov++;
+            // coverages.push_back(traj.get_coverage());
             // std::cout << "COVERAGE" << '\n';
             // for (auto q: traj.get_coverage()) std::cout << q << ' ';
             // std::cout << '\n';
@@ -124,7 +129,7 @@ void AO2Mlightest(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra
         n_steps += traj.get_changes_size() - len_last;
 
     } while (traj.find_neighbour());
-    n_cov += coverages.size();
+    // n_cov += coverages.size();
 }
 
 void AO2LL(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, uint64_t& n_steps) {
@@ -134,7 +139,8 @@ void AO2LL(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, uint6
     do {
         len_last = traj.get_changes_size();
         if (traj.complete_trajectory()) {
-            coverages.push_back(traj.get_coverage());
+            n_cov++;
+            // coverages.push_back(traj.get_coverage());
             // std::cout << "COVERAGE" << '\n';
             // for (auto q: traj.get_coverage()) std::cout << q << ' ';
             // std::cout << '\n';
@@ -144,7 +150,7 @@ void AO2LL(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, uint6
         n_steps += traj.get_changes_size() - len_last;
 
     } while (traj.find_neighbour());
-    n_cov += coverages.size();
+    // n_cov += coverages.size();
 }
 
 void AO2Moptimized(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, uint64_t& n_steps) {
@@ -154,7 +160,8 @@ void AO2Moptimized(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extr
     do {
         len_last = traj.get_changes_size();
         if (traj.complete_trajectory()) {
-            coverages.push_back(traj.get_coverage());
+            n_cov++;
+            // coverages.push_back(traj.get_coverage());
             // std::cout << "COVERAGE" << '\n';
             // for (auto q: traj.get_coverage()) std::cout << q << ' ';
             // std::cout << '\n';
@@ -164,7 +171,7 @@ void AO2Moptimized(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extr
         n_steps += traj.get_changes_size() - len_last;
 
     } while (traj.find_neighbour());
-    n_cov += coverages.size();
+    // n_cov += coverages.size();
 }
 
 void AO2Best(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, uint64_t& n_steps) {
@@ -174,7 +181,8 @@ void AO2Best(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, uin
     do {
         len_last = traj.get_changes_size();
         if (traj.complete_trajectory()) {
-            coverages.push_back(traj.get_coverage());
+            n_cov++;
+            // coverages.push_back(traj.get_coverage());
             // std::cout << "COVERAGE" << '\n';
             // for (auto q: traj.get_coverage()) std::cout << q << ' ';
             // std::cout << '\n';
@@ -184,7 +192,7 @@ void AO2Best(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, uin
         n_steps += traj.get_changes_size() - len_last;
 
     } while (traj.find_neighbour());
-    n_cov += coverages.size();
+    // n_cov += coverages.size();
 }
 
 #endif

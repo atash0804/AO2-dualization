@@ -59,8 +59,8 @@ protected:
         coord count;
         ull tmp;
         ull *H_B = new ull[col_chunks]();
-        ull *covered_by_one = new ull[col_chunks];
-        for (coord j = 0; j < col_chunks; j++) covered_by_one[j] = ull(-1);
+        // ull *covered_by_one = new ull[col_chunks];
+        // for (coord j = 0; j < col_chunks; j++) covered_by_one[j] = ull(-1);
         for (coord i = 0; i < n; i++) {
             if (!B[i]) continue;
             for (coord j = 0; j < col_chunks; j++) {
@@ -69,9 +69,9 @@ protected:
         }
         for (coord i = 0; i < n; i++) {
             if (!(states.top()[i] & ST_IS_COV)) {
-                for (coord j = 0; j < col_chunks; j++) {
-                    covered_by_one[j] &= M[i][j];
-                }
+                // for (coord j = 0; j < col_chunks; j++) {
+                //     covered_by_one[j] &= M[i][j];
+                // }
                 count = 0;
                 for (coord j = 0; j < col_chunks; j++) {
                     tmp = M[i][j] & H_B[j];
@@ -100,21 +100,21 @@ protected:
                 }
             }
         }
-        if ((latest_element.first != -1) && (covered_by_one[latest_element.second / CH_SIZE] & (ull(1) << (CH_SIZE_1 - latest_element.second % CH_SIZE)))) {
-            // set j acc to latest element
-            ull tmp;
-            for (coord i = 0; i < n; i++) {
-                if (states.top()[i] == ST_COMP) {
-                    tmp = 0;
-                    for (coord j = 0; j < col_chunks; j++) {
-                        tmp |= covered_by_one[j] & M[i][j];
-                    }
-                    // if (!tmp) cout << "WOW I SHOULD NOT BE HERE\n";
-                    if (!tmp) return false;
-                }
-            }
-
-        }
+        // if ((latest_element.first != -1) && (covered_by_one[latest_element.second / CH_SIZE] & (ull(1) << (CH_SIZE_1 - latest_element.second % CH_SIZE)))) {
+        //     // set j acc to latest element
+        //     ull tmp;
+        //     for (coord i = 0; i < n; i++) {
+        //         if (states.top()[i] == ST_COMP) {
+        //             tmp = 0;
+        //             for (coord j = 0; j < col_chunks; j++) {
+        //                 tmp |= covered_by_one[j] & M[i][j];
+        //             }
+        //             if (!tmp) cout << "WOW I SHOULD NOT BE HERE\n";
+        //             if (!tmp) return false;
+        //         }
+        //     }
+        //
+        // }
 
         return true;
     }
@@ -193,19 +193,21 @@ protected:
         coord best_col = -1;
         bool is_set;
 
-        coord n_uncov = 0;
+        ull* mask = new ull[col_chunks]();
+        for (coord j = 0; j < col_chunks; j++) mask[j] = ull(-1);
         for (coord i = 0; i < n; i++) {
-            if (!(states.top()[i] & ST_IS_COV)) n_uncov++;
+            if (!(states.top()[i] & ST_IS_COV)) {
+                for (coord j = 0; j < col_chunks; j++) mask[j] &= M[i][j];
+            }
             if (!B[i]) continue;
             for (coord j = 0; j < m; j++) {
                 if (B[i][j/CH_SIZE] & (ull(1) << (CH_SIZE_1 - j % CH_SIZE))) columns[j]++;
             }
         }
 
-        ull* mask = new ull[col_chunks]();
         bool covers_all_comp;
         for (coord j = 0; j < m; j++) {
-            if (columns[j] == n_uncov) {
+            if (mask[j/CH_SIZE] & (ull(1) << (CH_SIZE_1 - j % CH_SIZE))) {
                 covers_all_comp = true;
                 for (coord i = 0; i < n; i++) {
                     if ((states.top()[i] & ST_IS_COMP) && (!(M[i][j/CH_SIZE] & (ull(1) << (CH_SIZE_1 - j % CH_SIZE))))) {
@@ -213,12 +215,14 @@ protected:
                         break;
                     }
                 }
-                if (!covers_all_comp) {
-                    mask[j/CH_SIZE] |= (ull(1) << (CH_SIZE_1 - j % CH_SIZE));
+                if (covers_all_comp) {
+                    mask[j/CH_SIZE] ^= (ull(1) << (CH_SIZE_1 - j % CH_SIZE));
+                } else {
                     columns[j] = 0;
                 }
             }
         }
+
         for (coord i = 0; i < n; i++) {
             if (!B[i]) continue;
             for (coord j = 0; j < col_chunks; j++) {
@@ -479,24 +483,29 @@ public:
     }
 };
 
+coord n_useful;
 void AO2Crit5(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, uint64_t& n_steps) {
     uint64_t len_last = 0;
     CovCollector coverages;
+    n_useful = 0;
     AO2TrajectoryCrit5 traj(n, m, R);
     do {
         len_last = traj.get_changes_size();
         if (traj.complete_trajectory()) {
-            coverages.push_back(traj.get_coverage());
+            // coverages.push_back(traj.get_coverage());
             // std::cout << "COVERAGE" << '\n';
             // for (auto q: traj.get_coverage()) std::cout << q << ' ';
             // std::cout << '\n';
+            n_useful += traj.get_changes_size() - len_last;
+            n_cov++;
         } else {
             n_extra++;
         }
         n_steps += traj.get_changes_size() - len_last;
 
     } while (traj.find_neighbour());
-    n_cov += coverages.size();
+    // n_cov += coverages.size();
+    cout << "N USEFUL:" << n_useful << '\n';
 }
 
 void print_stats(std::string name, double elapsed, uint64_t & n_cov, uint64_t& n_extra, uint64_t& n_steps) {
@@ -523,7 +532,7 @@ int main(int argc, char *argv[]) {
                 uint64_t n_cov1 = 0, n_cov2 = 0, n_cov3 = 0, n_cov4 = 0;
                 uint64_t n_extra1 = 0, n_extra2 = 0, n_extra3 = 0, n_extra4 = 0;
                 uint64_t n_steps1 = 0, n_steps2 = 0, n_steps3 = 0, n_steps4 = 0;
-                // generate_matrix(HEIGHT, WIDTH, "matrix.txt", SPARSITY);
+                generate_matrix(HEIGHT, WIDTH, "matrix.txt", SPARSITY);
                 ull** R = read_matrix("matrix.txt", HEIGHT, WIDTH);
 
                 if (has_zero_rows(R, HEIGHT, WIDTH)) {
