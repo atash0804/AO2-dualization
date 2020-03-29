@@ -193,40 +193,43 @@ protected:
         coord best_col = -1;
         bool is_set;
 
+        ull* mask1 = new ull[col_chunks]();
+        ull* mask2 = new ull[col_chunks]();
         ull* mask = new ull[col_chunks]();
-        for (coord j = 0; j < col_chunks; j++) mask[j] = ull(-1);
+        for (coord j = 0; j < col_chunks; j++) {
+            mask1[j] = ull(-1);
+            mask2[j] = ull(-1);
+        }
         for (coord i = 0; i < n; i++) {
             if (!(states.top()[i] & ST_IS_COV)) {
-                for (coord j = 0; j < col_chunks; j++) mask[j] &= M[i][j];
+                for (coord j = 0; j < col_chunks; j++) mask1[j] &= M[i][j];
+            } else {
+                if (states.top()[i] & ST_IS_COMP) {
+                    for (coord j = 0; j < col_chunks; j++) mask2[j] &= M[i][j];
+                }
             }
+        }
+        for (coord i = 0; i < n; i++) {
             if (!B[i]) continue;
             for (coord j = 0; j < m; j++) {
                 if (B[i][j/CH_SIZE] & (ull(1) << (CH_SIZE_1 - j % CH_SIZE))) columns[j]++;
             }
         }
-
-        bool covers_all_comp;
-        for (coord j = 0; j < m; j++) {
-            if (mask[j/CH_SIZE] & (ull(1) << (CH_SIZE_1 - j % CH_SIZE))) {
-                covers_all_comp = true;
-                for (coord i = 0; i < n; i++) {
-                    if ((states.top()[i] & ST_IS_COMP) && (!(M[i][j/CH_SIZE] & (ull(1) << (CH_SIZE_1 - j % CH_SIZE))))) {
-                        covers_all_comp = false;
-                        break;
-                    }
-                }
-                if (covers_all_comp) {
-                    mask[j/CH_SIZE] ^= (ull(1) << (CH_SIZE_1 - j % CH_SIZE));
-                } else {
-                    columns[j] = 0;
-                }
-            }
+        bool is_zero = true;
+        for (coord j = 0; j < col_chunks; j++) {
+            mask[j] = mask1[j] & (~mask2[j]);
+            if (mask[j]) is_zero = false;
         }
 
-        for (coord i = 0; i < n; i++) {
-            if (!B[i]) continue;
-            for (coord j = 0; j < col_chunks; j++) {
-                B[i][j] &= (~mask[j]);
+        for (coord j = 0; j < m; j++) {
+            if (mask[j / CH_SIZE]  & (ull(1) << (CH_SIZE_1 - j % CH_SIZE))) columns[j] = 0;
+        }
+        if (!is_zero) {
+            for (coord i = 0; i < n; i++) {
+                if (!B[i]) continue;
+                for (coord j = 0; j < col_chunks; j++) {
+                    B[i][j] &= (~mask[j]);
+                }
             }
         }
 
@@ -496,16 +499,19 @@ void AO2Crit5(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, ui
             // std::cout << "COVERAGE" << '\n';
             // for (auto q: traj.get_coverage()) std::cout << q << ' ';
             // std::cout << '\n';
-            n_useful += traj.get_changes_size() - len_last;
+            // n_useful += traj.get_changes_size() - len_last;
             n_cov++;
         } else {
+            // if (traj.get_changes_size() - len_last >= 4) {
+            //     cout << traj.get_changes_size() - len_last << '\n';
+            // }
             n_extra++;
         }
         n_steps += traj.get_changes_size() - len_last;
 
     } while (traj.find_neighbour());
     // n_cov += coverages.size();
-    cout << "N USEFUL:" << n_useful << '\n';
+    // cout << "N USEFUL:" << n_useful << '\n';
 }
 
 void print_stats(std::string name, double elapsed, uint64_t & n_cov, uint64_t& n_extra, uint64_t& n_steps) {
