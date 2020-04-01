@@ -10,6 +10,8 @@
 #include "matrix_utils.h"
 #include "AO2.h"
 
+coord n_useful;
+
 /************************************************************
 *   This file contains experimental implementation of AO2
 *   algorithm
@@ -32,6 +34,7 @@ protected:
     //! Stack of changes to B
     /*! Each change is represented as binary matrix of size mxn*/
     BMatrixStack changes;
+    std::stack<bool> has_useful_ch;
 
     //! Stack of states of B rows
     /*! Each state is represented as *st */
@@ -336,6 +339,7 @@ protected:
         }
         states.push(updated_state);
         changes.push(B);
+        has_useful_ch.push(false);
         B = updated_B;
         if ((!has_uncov) && has_comp) {
             return false;
@@ -352,6 +356,8 @@ protected:
     void update_stack(Element& el) {
         ull** latest_state = changes.top();
         changes.pop();
+        n_useful += has_useful_ch.top();
+        has_useful_ch.pop();
 
         delete [] states.top();
         states.pop();
@@ -456,6 +462,9 @@ public:
             // cout << "AFTER ELIM INCOMPAT\n";
             // print_B();
         }
+        int changes_len = has_useful_ch.size();
+        for (; !has_useful_ch.empty(); has_useful_ch.pop()) {}
+        for (int i = 0; i < changes_len; i++) has_useful_ch.push(true);
         return true;
     }
 
@@ -509,7 +518,6 @@ public:
     }
 };
 
-coord n_useful;
 void AO2Crit5(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, uint64_t& n_steps) {
     uint64_t len_last = 0;
     CovCollector coverages;
@@ -522,7 +530,7 @@ void AO2Crit5(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, ui
             // std::cout << "COVERAGE" << '\n';
             // for (auto q: traj.get_coverage()) std::cout << q << ' ';
             // std::cout << '\n';
-            n_useful += traj.get_changes_size() - len_last;
+            // n_useful += traj.get_changes_size() - len_last;
             n_cov++;
         } else {
             // if (traj.get_changes_size() - len_last >= 4) {
