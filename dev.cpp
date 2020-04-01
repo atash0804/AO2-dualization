@@ -233,6 +233,29 @@ protected:
             }
         }
 
+        for (coord i = 0; i < n; ++i) {
+            if (!B[i]) continue;
+            if (states.top()[i] == ST_EMPTY) {
+                for (coord j = 0; j < col_chunks; j++) {
+                    if (B[i][j] & mask1[j]) least_d1 = i;
+                }
+                break;
+            }
+        }
+        if (least_d1 != coord(-1)) {
+            for (coord j = 0; j < m; j++) {
+                if (B[least_d1][j / CH_SIZE] & mask1[j / CH_SIZE] & (ull(1) << (CH_SIZE_1 - j % CH_SIZE))) {
+                    least_d2 = j;
+                    break;
+                }
+            }
+            ull tmp = ~(ull(1) << (CH_SIZE_1 - least_d2 % CH_SIZE));
+            for (coord i = least_d1 + 1; i < n; i++) {
+                if (!B[i]) continue;
+                B[i][least_d2/CH_SIZE] &= tmp;
+            }
+            return Element(least_d1, least_d2);
+        }
         for (coord i = 0; i < n; i++) {
             // if row is not covered or is competing
             if (!(states.top()[i] & ST_IS_COV) || states.top()[i] & ST_IS_COMP) {
@@ -499,7 +522,7 @@ void AO2Crit5(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, ui
             // std::cout << "COVERAGE" << '\n';
             // for (auto q: traj.get_coverage()) std::cout << q << ' ';
             // std::cout << '\n';
-            // n_useful += traj.get_changes_size() - len_last;
+            n_useful += traj.get_changes_size() - len_last;
             n_cov++;
         } else {
             // if (traj.get_changes_size() - len_last >= 4) {
@@ -511,7 +534,7 @@ void AO2Crit5(coord n, coord m, ull** R, uint64_t & n_cov, uint64_t& n_extra, ui
 
     } while (traj.find_neighbour());
     // n_cov += coverages.size();
-    // cout << "N USEFUL:" << n_useful << '\n';
+    cout << "N USEFUL:" << n_useful << '\n';
 }
 
 void print_stats(std::string name, double elapsed, uint64_t & n_cov, uint64_t& n_extra, uint64_t& n_steps) {
@@ -538,7 +561,7 @@ int main(int argc, char *argv[]) {
                 uint64_t n_cov1 = 0, n_cov2 = 0, n_cov3 = 0, n_cov4 = 0;
                 uint64_t n_extra1 = 0, n_extra2 = 0, n_extra3 = 0, n_extra4 = 0;
                 uint64_t n_steps1 = 0, n_steps2 = 0, n_steps3 = 0, n_steps4 = 0;
-                generate_matrix(HEIGHT, WIDTH, "matrix.txt", SPARSITY);
+                // generate_matrix(HEIGHT, WIDTH, "matrix.txt", SPARSITY);
                 ull** R = read_matrix("matrix.txt", HEIGHT, WIDTH);
 
                 if (has_zero_rows(R, HEIGHT, WIDTH)) {
