@@ -126,7 +126,7 @@ protected:
     /*! Includes 1s from dominating rows which correspond to 0s in dominated row.*/
     bool eliminate_dominating_rows() {
         bool has_changed = false;
-        ull **updated_B = new ull*[n];
+        ull **updated_B = new ull*[n+1];
         bool i1_dom_i2, i2_dom_i1;
         for (coord i1 = 0; i1 < n; i1++) {
             if (!B[i1]) {
@@ -170,6 +170,7 @@ protected:
                 }
             }
         }
+        updated_B[n] = B[n];
         delete [] H_B;
         for (coord i = 0; i < n; i++) delete [] B[i];
         delete [] B;
@@ -263,34 +264,62 @@ protected:
         delete [] mask1;
         delete [] mask2;
 
-        for (coord i = 0; i < n; i++) {
-            // if row is not covered or is competing
-            if (!(states.top()[i] & ST_IS_COV) || states.top()[i] & ST_IS_COMP) {
-                curr_Er = 0;
-                is_set = false;
-                for (coord j = 0; j < m; j++) {
-                    if (M[i][j/CH_SIZE] & (ull(1) << (CH_SIZE_1 - j % CH_SIZE))) {
-                        curr_Er += columns[j];
-                        if (columns[j] && (!is_set || (columns[best_col] > columns[j]))) {
-                            best_col = j;
-                            is_set = true;
-                        }
+        if (B[n] != (ull*)(-1)) {
+            coord i = uint64_t(B[n]);
+            curr_Er = 0;
+            is_set = false;
+            for (coord j = 0; j < m; j++) {
+                if (M[i][j/CH_SIZE] & (ull(1) << (CH_SIZE_1 - j % CH_SIZE))) {
+                    curr_Er += columns[j];
+                    if (columns[j] && (!is_set || (columns[best_col] > columns[j]))) {
+                        best_col = j;
+                        is_set = true;
                     }
                 }
-                if (!curr_Er) return Element(-1, -1);
-                if (curr_Er < least_Er) {
-                    least_Er = curr_Er;
-                    least_d2 = best_col;
-                    for (coord i1 = 0; i1 < n; i1++) {
-                        if (!B[i1]) continue;
-                        if (B[i1][least_d2/CH_SIZE] && (B[i1][least_d2/CH_SIZE]&M[i][least_d2/CH_SIZE]) && (B[i1][least_d2/CH_SIZE] & (ull(1) << (CH_SIZE_1 - least_d2 % CH_SIZE)))) {
-                            least_d1 = i1;
-                            break;
+            }
+            if (!curr_Er) return Element(-1, -1);
+            least_d2 = best_col;
+            for (coord i1 = 0; i1 < n; i1++) {
+                if (!B[i1]) continue;
+                if (B[i1][least_d2/CH_SIZE] && (B[i1][least_d2/CH_SIZE]&M[i][least_d2/CH_SIZE]) && (B[i1][least_d2/CH_SIZE] & (ull(1) << (CH_SIZE_1 - least_d2 % CH_SIZE)))) {
+                    least_d1 = i1;
+                    break;
+                }
+            }
+        } else {
+            for (coord i = 0; i < n; i++) {
+                // if row is not covered or is competing
+                if (!(states.top()[i] & ST_IS_COV) || states.top()[i] & ST_IS_COMP) {
+                    curr_Er = 0;
+                    is_set = false;
+                    for (coord j = 0; j < m; j++) {
+                        if (M[i][j/CH_SIZE] & (ull(1) << (CH_SIZE_1 - j % CH_SIZE))) {
+                            curr_Er += columns[j];
+                            if (columns[j] && (!is_set || (columns[best_col] > columns[j]))) {
+                                best_col = j;
+                                is_set = true;
+                            }
+                        }
+                    }
+                    if (!curr_Er) return Element(-1, -1);
+                    if (curr_Er < least_Er) {
+                        B[n] = (ull*)(i);
+                        least_Er = curr_Er;
+                        least_d2 = best_col;
+                        for (coord i1 = 0; i1 < n; i1++) {
+                            if (!B[i1]) continue;
+                            if (B[i1][least_d2/CH_SIZE] && (B[i1][least_d2/CH_SIZE]&M[i][least_d2/CH_SIZE]) && (B[i1][least_d2/CH_SIZE] & (ull(1) << (CH_SIZE_1 - least_d2 % CH_SIZE)))) {
+                                least_d1 = i1;
+                                break;
+                            }
                         }
                     }
                 }
             }
         }
+
+
+
         // cout << endl;
         delete [] columns;
         // cout << least_d1 << ' ' << least_d2 << endl << flush;
@@ -306,7 +335,7 @@ protected:
     B_kj = 0, the incomatible elements are all 1s from B_k & B_i (elementwise
     conjunction of two rows)*/
     bool eliminate_incompatible(Element& el) {
-        ull **updated_B = new ull*[n];
+        ull **updated_B = new ull*[n+1];
 
         st* updated_state = new st[n];
         for (coord i = 0; i < n; i++) updated_state[i] = states.top()[i];
@@ -341,6 +370,8 @@ protected:
                 has_uncov = true;
             }
         }
+        updated_B[n] = (ull*)(-1);
+
         states.push(updated_state);
         changes.push(B);
         has_useful_ch.push(false);
@@ -389,7 +420,7 @@ public:
         m = d2;
         col_chunks = (m-1) / CH_SIZE + 1;
         row_chunks = (n-1) / CH_SIZE + 1;
-        B = new ull*[n];
+        B = new ull*[n+1];
         M = new ull*[n];
         for (coord i = 0; i < n; i++) {
             B[i] = new ull[col_chunks];
@@ -398,6 +429,7 @@ public:
                 B[i][j] = M[i][j] = Matrix[i][j];
             }
         }
+        B[n] = (ull*)(-1);
 
         states = RowStatesStack(2*m);
         st* tmp = new st[n]();
@@ -562,8 +594,8 @@ int main(int argc, char *argv[]) {
     double ROUNDS = 1;
     clock_t start, stop;
     srand(time(NULL));
-    for (coord HEIGHT: std::vector<int>{10, 20}) {
-        for (coord WIDTH: std::vector<int>{20, 40, 100}) {
+    for (coord HEIGHT: std::vector<int>{50}) {
+        for (coord WIDTH: std::vector<int>{50}) {
             double elapsed1 = 0, elapsed2 = 0, elapsed3 = 0, elapsed4 = 0;
             uint64_t n_cov1 = 0, n_cov2 = 0, n_cov3 = 0, n_cov4 = 0;
             uint64_t n_extra1 = 0, n_extra2 = 0, n_extra3 = 0, n_extra4 = 0;
@@ -603,24 +635,24 @@ int main(int argc, char *argv[]) {
                 elapsed4 += (double) (stop - start) / CLOCKS_PER_SEC;
 
                 // if (n_cov4 != n_cov3) return 0;
-                // print_stats("AO2 ", elapsed1, n_cov1, n_extra1, n_steps1);
-                // print_stats("AO2M", elapsed2, n_cov2, n_extra2, n_steps2);
+                print_stats("AO2 ", elapsed1, n_cov1, n_extra1, n_steps1);
+                print_stats("AO2M", elapsed2, n_cov2, n_extra2, n_steps2);
                 // print_stats("AO2Z", elapsed3, n_cov3, n_extra3, n_steps3);
-                // print_stats("Cr 5", elapsed4, n_cov4, n_extra4, n_steps4);
+                print_stats("Cr 5", elapsed4, n_cov4, n_extra4, n_steps4);
 
                 for (coord i = 0; i < HEIGHT; i++) {
                     delete [] R[i];
                 }
                 delete [] R;
             }
-            std::cout << HEIGHT << " \\times " << WIDTH << " & ";
-            std::cout << n_useful << " & ";
-            std::cout << uint64_t(n_steps1 / ROUNDS) << " & ";
-            std::cout << uint64_t(n_steps2 / ROUNDS) << " & ";
-            std::cout << uint64_t(n_steps4 / ROUNDS) << " & ";
-            std::cout << float(n_useful) / float(n_steps1) << " & ";
-            std::cout << float(n_useful) / float(n_steps2) << " & ";
-            std::cout << float(n_useful) / float(n_steps4) << " \\\\ \n";
+            // std::cout << HEIGHT << " \\times " << WIDTH << " & ";
+            // std::cout << n_useful << " & ";
+            // std::cout << uint64_t(n_steps1 / ROUNDS) << " & ";
+            // std::cout << uint64_t(n_steps2 / ROUNDS) << " & ";
+            // std::cout << uint64_t(n_steps4 / ROUNDS) << " & ";
+            // std::cout << float(n_useful) / float(n_steps1) << " & ";
+            // std::cout << float(n_useful) / float(n_steps2) << " & ";
+            // std::cout << float(n_useful) / float(n_steps4) << " \\\\ \n";
             //
             // std::cout << HEIGHT << " \\times " << WIDTH << " & ";
             // std::cout << elapsed1 / ROUNDS << " & ";
