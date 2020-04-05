@@ -259,6 +259,10 @@ protected:
             }
             return Element(least_d1, least_d2);
         }
+        delete [] mask;
+        delete [] mask1;
+        delete [] mask2;
+
         for (coord i = 0; i < n; i++) {
             // if row is not covered or is competing
             if (!(states.top()[i] & ST_IS_COV) || states.top()[i] & ST_IS_COMP) {
@@ -558,18 +562,18 @@ int main(int argc, char *argv[]) {
     double ROUNDS = 1;
     clock_t start, stop;
     srand(time(NULL));
-    for (coord HEIGHT: std::vector<int>{40}) {
-        for (coord WIDTH: std::vector<int>{40}) {
-            // double elapsed1 = 0, elapsed2 = 0, elapsed3 = 0, elapsed4 = 0;
-            // uint64_t n_cov1 = 0, n_cov2 = 0, n_cov3 = 0, n_cov4 = 0;
-            // uint64_t n_extra1 = 0, n_extra2 = 0, n_extra3 = 0, n_extra4 = 0;
-            // uint64_t n_steps1 = 0, n_steps2 = 0, n_steps3 = 0, n_steps4 = 0;
+    for (coord HEIGHT: std::vector<int>{10, 20}) {
+        for (coord WIDTH: std::vector<int>{20, 40, 100}) {
+            double elapsed1 = 0, elapsed2 = 0, elapsed3 = 0, elapsed4 = 0;
+            uint64_t n_cov1 = 0, n_cov2 = 0, n_cov3 = 0, n_cov4 = 0;
+            uint64_t n_extra1 = 0, n_extra2 = 0, n_extra3 = 0, n_extra4 = 0;
+            uint64_t n_steps1 = 0, n_steps2 = 0, n_steps3 = 0, n_steps4 = 0;
             for (int i = 0; i < ROUNDS; i++) {
-                double elapsed1 = 0, elapsed2 = 0, elapsed3 = 0, elapsed4 = 0;
-                uint64_t n_cov1 = 0, n_cov2 = 0, n_cov3 = 0, n_cov4 = 0;
-                uint64_t n_extra1 = 0, n_extra2 = 0, n_extra3 = 0, n_extra4 = 0;
-                uint64_t n_steps1 = 0, n_steps2 = 0, n_steps3 = 0, n_steps4 = 0;
-                // generate_matrix(HEIGHT, WIDTH, "matrix.txt", SPARSITY);
+                // double elapsed1 = 0, elapsed2 = 0, elapsed3 = 0, elapsed4 = 0;
+                // uint64_t n_cov1 = 0, n_cov2 = 0, n_cov3 = 0, n_cov4 = 0;
+                // uint64_t n_extra1 = 0, n_extra2 = 0, n_extra3 = 0, n_extra4 = 0;
+                // uint64_t n_steps1 = 0, n_steps2 = 0, n_steps3 = 0, n_steps4 = 0;
+                generate_matrix(HEIGHT, WIDTH, "matrix.txt", SPARSITY);
                 ull** R = read_matrix("matrix.txt", HEIGHT, WIDTH);
 
                 if (has_zero_rows(R, HEIGHT, WIDTH)) {
@@ -588,10 +592,10 @@ int main(int argc, char *argv[]) {
                 stop = clock();
                 elapsed2 += (double) (stop - start) / CLOCKS_PER_SEC;
 
-                start = clock();
-                AO2Best(HEIGHT, WIDTH, R, n_cov3, n_extra3, n_steps3);
-                stop = clock();
-                elapsed3 += (double) (stop - start) / CLOCKS_PER_SEC;
+                // start = clock();
+                // AO2Best(HEIGHT, WIDTH, R, n_cov3, n_extra3, n_steps3);
+                // stop = clock();
+                // elapsed3 += (double) (stop - start) / CLOCKS_PER_SEC;
 
                 start = clock();
                 AO2Crit5(HEIGHT, WIDTH, R, n_cov4, n_extra4, n_steps4);
@@ -599,31 +603,38 @@ int main(int argc, char *argv[]) {
                 elapsed4 += (double) (stop - start) / CLOCKS_PER_SEC;
 
                 // if (n_cov4 != n_cov3) return 0;
-                print_stats("AO2 ", elapsed1, n_cov1, n_extra1, n_steps1);
-                print_stats("AO2M", elapsed2, n_cov2, n_extra2, n_steps2);
-                print_stats("AO2Z", elapsed3, n_cov3, n_extra3, n_steps3);
-                print_stats("Cr 5", elapsed4, n_cov4, n_extra4, n_steps4);
+                // print_stats("AO2 ", elapsed1, n_cov1, n_extra1, n_steps1);
+                // print_stats("AO2M", elapsed2, n_cov2, n_extra2, n_steps2);
+                // print_stats("AO2Z", elapsed3, n_cov3, n_extra3, n_steps3);
+                // print_stats("Cr 5", elapsed4, n_cov4, n_extra4, n_steps4);
 
                 for (coord i = 0; i < HEIGHT; i++) {
                     delete [] R[i];
                 }
                 delete [] R;
             }
-
+            std::cout << HEIGHT << " \\times " << WIDTH << " & ";
+            std::cout << n_useful << " & ";
+            std::cout << uint64_t(n_steps1 / ROUNDS) << " & ";
+            std::cout << uint64_t(n_steps2 / ROUNDS) << " & ";
+            std::cout << uint64_t(n_steps4 / ROUNDS) << " & ";
+            std::cout << float(n_useful) / float(n_steps1) << " & ";
+            std::cout << float(n_useful) / float(n_steps2) << " & ";
+            std::cout << float(n_useful) / float(n_steps4) << " \\\\ \n";
+            //
             // std::cout << HEIGHT << " \\times " << WIDTH << " & ";
             // std::cout << elapsed1 / ROUNDS << " & ";
             // std::cout << elapsed2 / ROUNDS << " & ";
-            // std::cout << elapsed3 / ROUNDS << " & ";
+            // // std::cout << elapsed3 / ROUNDS << " & ";
             // std::cout << elapsed4 / ROUNDS << " & ";
             // std::cout << uint64_t(n_cov2 / ROUNDS) << " & ";
-            // std::cout << uint64_t(n_cov4 / ROUNDS) << " & ";
             // std::cout << uint64_t(n_extra1 / ROUNDS) << " & ";
             // std::cout << uint64_t(n_extra2 / ROUNDS) << " & ";
-            // std::cout << uint64_t(n_extra3 / ROUNDS) << " & ";
+            // // std::cout << uint64_t(n_extra3 / ROUNDS) << " & ";
             // std::cout << uint64_t(n_extra4 / ROUNDS) << " & ";
             // std::cout << uint64_t(n_steps1 / ROUNDS) << " & ";
             // std::cout << uint64_t(n_steps2 / ROUNDS) << " & ";
-            // std::cout << uint64_t(n_steps3 / ROUNDS) << " & ";
+            // // std::cout << uint64_t(n_steps3 / ROUNDS) << " & ";
             // std::cout << uint64_t(n_steps4 / ROUNDS) << " \\\\ \n";
         }
     }
