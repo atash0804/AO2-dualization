@@ -197,74 +197,48 @@ protected:
         coord best_col = -1;
         bool is_set;
 
-        ull* mask1 = new ull[col_chunks]();
-        ull* mask2 = new ull[col_chunks]();
-        ull* mask = new ull[col_chunks]();
-        for (coord j = 0; j < col_chunks; j++) {
-            mask1[j] = ull(-1);
-            mask2[j] = ull(-1);
-        }
-        for (coord i = 0; i < n; i++) {
-            if (!(states.top()[i] & ST_IS_COV)) {
-                for (coord j = 0; j < col_chunks; j++) mask1[j] &= M[i][j];
-            } else {
-                if (states.top()[i] & ST_IS_COMP) {
-                    for (coord j = 0; j < col_chunks; j++) mask2[j] &= M[i][j];
+        if (B[n] != (ull*)(-1)) {
+            ull* mask = new ull[col_chunks]();
+            for (coord j = 0; j < col_chunks; j++) {
+                mask[j] = ull(-1);
+            }
+            for (coord i = 0; i < n; i++) {
+                if ((!(states.top()[i] & ST_IS_COV)) || states.top()[i] & ST_IS_COMP) {
+                    for (coord j = 0; j < col_chunks; j++) mask[j] &= M[i][j];
                 }
             }
-        }
-        for (coord i = 0; i < n; i++) {
-            if (!B[i]) continue;
-            for (coord j = 0; j < m; j++) {
-                if (B[i][j/CH_SIZE] & (ull(1) << (CH_SIZE_1 - j % CH_SIZE))) columns[j]++;
-            }
-        }
-        bool is_zero = true;
-        for (coord j = 0; j < col_chunks; j++) {
-            mask[j] = mask1[j] & (~mask2[j]);
-            if (mask[j]) is_zero = false;
-        }
-
-        for (coord j = 0; j < m; j++) {
-            if (mask[j / CH_SIZE]  & (ull(1) << (CH_SIZE_1 - j % CH_SIZE))) columns[j] = 0;
-        }
-        if (!is_zero) {
             for (coord i = 0; i < n; i++) {
                 if (!B[i]) continue;
-                for (coord j = 0; j < col_chunks; j++) {
-                    B[i][j] &= (~mask[j]);
+                for (coord j = 0; j < m; j++) {
+                    if (B[i][j/CH_SIZE] & (ull(1) << (CH_SIZE_1 - j % CH_SIZE))) columns[j]++;
                 }
             }
-        }
 
-        for (coord i = 0; i < n; ++i) {
-            if (!B[i]) continue;
-            if (states.top()[i] == ST_EMPTY) {
-                for (coord j = 0; j < col_chunks; j++) {
-                    if (B[i][j] & mask1[j]) least_d1 = i;
-                }
-                break;
-            }
-        }
-        if (least_d1 != coord(-1)) {
-            for (coord j = 0; j < m; j++) {
-                if (B[least_d1][j / CH_SIZE] & mask1[j / CH_SIZE] & (ull(1) << (CH_SIZE_1 - j % CH_SIZE))) {
-                    least_d2 = j;
+            for (coord i = 0; i < n; ++i) {
+                if (!B[i]) continue;
+                if (states.top()[i] == ST_EMPTY) {
+                    for (coord j = 0; j < col_chunks; j++) {
+                        if (B[i][j] & mask[j]) least_d1 = i;
+                    }
                     break;
                 }
             }
-            ull tmp = ~(ull(1) << (CH_SIZE_1 - least_d2 % CH_SIZE));
-            for (coord i = least_d1 + 1; i < n; i++) {
-                if (!B[i]) continue;
-                B[i][least_d2/CH_SIZE] &= tmp;
+            if (least_d1 != coord(-1)) {
+                for (coord j = 0; j < m; j++) {
+                    if (B[least_d1][j / CH_SIZE] & mask[j / CH_SIZE] & (ull(1) << (CH_SIZE_1 - j % CH_SIZE))) {
+                        least_d2 = j;
+                        break;
+                    }
+                }
+                ull tmp = ~(ull(1) << (CH_SIZE_1 - least_d2 % CH_SIZE));
+                for (coord i = least_d1 + 1; i < n; i++) {
+                    if (!B[i]) continue;
+                    B[i][least_d2/CH_SIZE] &= tmp;
+                }
+                delete [] mask;
+                return Element(least_d1, least_d2);
             }
-            return Element(least_d1, least_d2);
-        }
-        delete [] mask;
-        delete [] mask1;
-        delete [] mask2;
-
-        if (B[n] != (ull*)(-1)) {
+            delete [] mask;
             coord i = uint64_t(B[n]);
             curr_Er = 0;
             is_set = false;
@@ -287,6 +261,75 @@ protected:
                 }
             }
         } else {
+            ull* mask1 = new ull[col_chunks]();
+            ull* mask2 = new ull[col_chunks]();
+            ull* mask = new ull[col_chunks]();
+            for (coord j = 0; j < col_chunks; j++) {
+                mask1[j] = ull(-1);
+                mask2[j] = ull(-1);
+            }
+            for (coord i = 0; i < n; i++) {
+                if (!(states.top()[i] & ST_IS_COV)) {
+                    for (coord j = 0; j < col_chunks; j++) mask1[j] &= M[i][j];
+                } else {
+                    if (states.top()[i] & ST_IS_COMP) {
+                        for (coord j = 0; j < col_chunks; j++) mask2[j] &= M[i][j];
+                    }
+                }
+            }
+            for (coord i = 0; i < n; i++) {
+                if (!B[i]) continue;
+                for (coord j = 0; j < m; j++) {
+                    if (B[i][j/CH_SIZE] & (ull(1) << (CH_SIZE_1 - j % CH_SIZE))) columns[j]++;
+                }
+            }
+            bool is_zero = true;
+            for (coord j = 0; j < col_chunks; j++) {
+                mask[j] = mask1[j] & (~mask2[j]);
+                if (mask[j]) is_zero = false;
+            }
+
+            for (coord j = 0; j < m; j++) {
+                if (mask[j / CH_SIZE]  & (ull(1) << (CH_SIZE_1 - j % CH_SIZE))) columns[j] = 0;
+            }
+            if (!is_zero) {
+                for (coord i = 0; i < n; i++) {
+                    if (!B[i]) continue;
+                    for (coord j = 0; j < col_chunks; j++) {
+                        B[i][j] &= (~mask[j]);
+                    }
+                }
+            }
+
+            for (coord i = 0; i < n; ++i) {
+                if (!B[i]) continue;
+                if (states.top()[i] == ST_EMPTY) {
+                    for (coord j = 0; j < col_chunks; j++) {
+                        if (B[i][j] & mask1[j]) least_d1 = i;
+                    }
+                    break;
+                }
+            }
+            if (least_d1 != coord(-1)) {
+                for (coord j = 0; j < m; j++) {
+                    if (B[least_d1][j / CH_SIZE] & mask1[j / CH_SIZE] & (ull(1) << (CH_SIZE_1 - j % CH_SIZE))) {
+                        least_d2 = j;
+                        break;
+                    }
+                }
+                ull tmp = ~(ull(1) << (CH_SIZE_1 - least_d2 % CH_SIZE));
+                for (coord i = least_d1 + 1; i < n; i++) {
+                    if (!B[i]) continue;
+                    B[i][least_d2/CH_SIZE] &= tmp;
+                }
+                delete [] mask;
+                delete [] mask1;
+                delete [] mask2;
+                return Element(least_d1, least_d2);
+            }
+            delete [] mask;
+            delete [] mask1;
+            delete [] mask2;
             for (coord i = 0; i < n; i++) {
                 // if row is not covered or is competing
                 if (!(states.top()[i] & ST_IS_COV) || states.top()[i] & ST_IS_COMP) {
@@ -339,7 +382,6 @@ protected:
 
         st* updated_state = new st[n];
         for (coord i = 0; i < n; i++) updated_state[i] = states.top()[i];
-        bool has_comp = false, has_uncov = false;
         for (coord k = 0; k < n; k++) {
             if (M[k][el.second / CH_SIZE] & (ull(1) << (CH_SIZE_1 - el.second % CH_SIZE))) {
                 // selected column covers row k
@@ -364,11 +406,6 @@ protected:
                         updated_B[k][j] = B[k][j] ^ (B[k][j] & M[el.first][j]);
                 }
             }
-
-            if (updated_state[k] == ST_COMP) has_comp = true;
-            if (!(updated_state[k] & ST_IS_COV)) {
-                has_uncov = true;
-            }
         }
         updated_B[n] = (ull*)(-1);
 
@@ -376,9 +413,6 @@ protected:
         changes.push(B);
         has_useful_ch.push(false);
         B = updated_B;
-        if ((!has_uncov) && has_comp) {
-            return false;
-        }
         return true;
     }
 
@@ -594,8 +628,8 @@ int main(int argc, char *argv[]) {
     double ROUNDS = 1;
     clock_t start, stop;
     srand(time(NULL));
-    for (coord HEIGHT: std::vector<int>{50}) {
-        for (coord WIDTH: std::vector<int>{50}) {
+    for (coord HEIGHT: std::vector<int>{40}) {
+        for (coord WIDTH: std::vector<int>{40}) {
             double elapsed1 = 0, elapsed2 = 0, elapsed3 = 0, elapsed4 = 0;
             uint64_t n_cov1 = 0, n_cov2 = 0, n_cov3 = 0, n_cov4 = 0;
             uint64_t n_extra1 = 0, n_extra2 = 0, n_extra3 = 0, n_extra4 = 0;
